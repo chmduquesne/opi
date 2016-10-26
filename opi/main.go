@@ -1,8 +1,10 @@
 package main
 
 import (
-	"flag"
 	"fmt"
+	"os"
+
+	"github.com/chmduquesne/opi"
 )
 
 const (
@@ -13,7 +15,11 @@ const (
 )
 
 func main() {
-	if len(flag.Args()) != 3 {
+	if len(os.Args) != 3 {
 		fmt.Print(usage)
+		os.Exit(1)
+	}
+	if os.Args[1] == "archive" {
+		opi.Archive(os.Args[2])
 	}
 }

@@ -27,9 +27,7 @@ const (
 )
 
 func Slice(path string) []byte {
-
 	fmt.Printf("splitting %s\n", path)
-
 	f, err := os.Open(path)
 	if err != nil {
 		log.Fatal(err)
@@ -39,13 +37,9 @@ func Slice(path string) []byte {
 			log.Fatal(err)
 		}
 	}()
-
 	r := bufio.NewReader(f)
-
 	_, id, _, err := SliceUntil(r, topmask)
-
 	return id
-
 }
 
 func store(b []byte) []byte {
@@ -67,9 +61,7 @@ func store(b []byte) []byte {
 // - rollsum the rolling checksum at the end of the metachunk
 // - err the error indicating whether the end of the buffer was reached
 func SliceUntil(r *bufio.Reader, mask uint32) (n uint64, id []byte, rollsum uint32, err error) {
-
 	if mask > chunkmask {
-
 		s := NewSuperChunk()
 		offset := uint64(0)
 		for {
@@ -87,7 +79,7 @@ func SliceUntil(r *bufio.Reader, mask uint32) (n uint64, id []byte, rollsum uint
 		}
 	} else {
 		// initially 128 bytes, capacity 4 * 8192
-		data := make([]byte, 128, 4*(1<<chunkbits))
+		data := make([]byte, windowSize, 4*(1<<chunkbits))
 		hash := adler32.New()
 
 		// read the initial window
@@ -113,7 +105,6 @@ func SliceUntil(r *bufio.Reader, mask uint32) (n uint64, id []byte, rollsum uint
 		}
 		return uint64(n), store(data), hash.Sum32(), err
 	}
-
 }
 
 func Archive(path string) []byte {
@@ -121,22 +112,17 @@ func Archive(path string) []byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	var res []byte
-
 	if info.IsDir() {
 		files, err := ioutil.ReadDir(path)
 		if err != nil {
 			log.Fatal(err)
 		}
-
 		entries := make([]string, 0)
-
 		for _, f := range files {
 			s := Archive(path + "/" + f.Name())
 			entries = append(entries, string(s))
 		}
-
 		resb, err := json.Marshal(entries)
 		if err != nil {
 			log.Fatal(err)
@@ -145,8 +131,6 @@ func Archive(path string) []byte {
 	} else {
 		res = Slice(path)
 	}
-
 	fmt.Printf("%s -> %s\n", path, res)
-
 	return res
 }

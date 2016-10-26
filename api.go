@@ -2,7 +2,7 @@ package opi
 
 import (
 	"bufio"
-	"crypto/sha1"
+	"crypto/sha512"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,11 +42,14 @@ func Slice(path string) []byte {
 	return id
 }
 
-func store(b []byte) []byte {
-	encoded := snappy.Encode(nil, b)
-	res := fmt.Sprintf("%x", sha1.Sum(encoded))
-	fmt.Printf("Storing %s\n", res)
-	return []byte(res)
+func Store(b []byte) []byte {
+	value := snappy.Encode(nil, b)
+	hash := []byte(fmt.Sprintf("%x", sha512.Sum512(value)))
+	key := hash[:]
+
+	c := NewClient()
+	c.Set(key, value)
+	return key
 }
 
 // Read the buffer until one of these conditions is met:
@@ -72,7 +75,7 @@ func SliceUntil(r *bufio.Reader, mask uint32) (n uint64, id []byte, rollsum uint
 			}
 			s.AddChild(offset, metaType, id)
 			if ((rollsum&mask == mask) && mask < topmask) || err != nil {
-				id = store(s.Bytes())
+				id = Store(s.Bytes())
 				return offset, id, rollsum, err
 			}
 			offset += n
@@ -89,7 +92,7 @@ func SliceUntil(r *bufio.Reader, mask uint32) (n uint64, id []byte, rollsum uint
 			if err == io.EOF && n > 0 {
 				data = data[:n]
 				hash.Write(data)
-				return uint64(n), store(data), hash.Sum32(), err
+				return uint64(n), Store(data), hash.Sum32(), err
 			}
 			return 0, []byte(""), 0, err
 		}
@@ -103,7 +106,7 @@ func SliceUntil(r *bufio.Reader, mask uint32) (n uint64, id []byte, rollsum uint
 			hash.Roll(b)
 			data = append(data, b)
 		}
-		return uint64(n), store(data), hash.Sum32(), err
+		return uint64(n), Store(data), hash.Sum32(), err
 	}
 }
 
@@ -127,7 +130,7 @@ func Archive(path string) []byte {
 		if err != nil {
 			log.Fatal(err)
 		}
-		res = store(resb)
+		res = Store(resb)
 	} else {
 		res = Slice(path)
 	}

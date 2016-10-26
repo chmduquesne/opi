@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/chmduquesne/opi"
 )
@@ -19,7 +20,16 @@ func main() {
 		fmt.Print(usage)
 		os.Exit(1)
 	}
+
+	cmd := exec.Command("opi-serve")
+	err := cmd.Start()
+	if err != nil {
+		fmt.Print(err)
+	}
+
 	if os.Args[1] == "archive" {
 		opi.Archive(os.Args[2])
 	}
+
+	cmd.Process.Kill()
 }

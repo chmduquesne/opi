@@ -2,6 +2,7 @@ package opi
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 )
@@ -14,8 +15,12 @@ func NewClient() *Client {
 	return &Client{host: Host()}
 }
 
+func (c *Client) BaseURL() string {
+	return "http://" + c.host + "/"
+}
+
 func (c *Client) Get(addr []byte) (value []byte, err error) {
-	resp, err := http.Get(c.host + "/" + string(addr))
+	resp, err := http.Get(c.BaseURL() + string(addr))
 	if err != nil {
 		return nil, err
 	}
@@ -25,9 +30,12 @@ func (c *Client) Get(addr []byte) (value []byte, err error) {
 }
 
 func (c *Client) Set(addr, value []byte) (err error) {
-	resp, err := http.Post(c.host+"/"+string(addr),
+	resp, err := http.Post(c.BaseURL()+string(addr),
 		"application/x-www-form-urlencoded",
 		bytes.NewReader(value))
+	if err != nil {
+		fmt.Errorf("%v", err)
+	}
 	defer resp.Body.Close()
 	return err
 }

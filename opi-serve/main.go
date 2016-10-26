@@ -6,11 +6,11 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"os/user"
 	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/chmduquesne/opi"
 )
 
 type Storage struct {
@@ -64,14 +64,6 @@ func (s *Storage) Get(key []byte) (value []byte, err error) {
 	return
 }
 
-func host() string {
-	res := os.Getenv("OPI_SERVE_HOST")
-	if res == "" {
-		res = "127.0.0.1:30280"
-	}
-	return res
-}
-
 func main() {
 	s := NewStorage()
 	defer s.Close()
@@ -100,7 +92,7 @@ func main() {
 
 	http.HandleFunc("/", handler)
 
-	addr := host()
+	addr := opi.Host()
 	log.Printf("Serving on http://%s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

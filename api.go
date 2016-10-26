@@ -2,7 +2,6 @@ package opi
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
@@ -13,110 +12,117 @@ import (
 
 	"github.com/chmduquesne/rollinghash/adler32"
 	"github.com/golang/snappy"
-	bencode "github.com/jackpal/bencode-go"
 )
 
 type any interface{}
 
 const (
 	// splitting algorithm
-	fanout    = 4
-	chunkbits = 13
-	levelmax  = (32 - chunkbits) / fanout
+	fanout     = 4
+	chunkbits  = 13
+	windowSize = 128
+
+	chunkmask = 0xffffffff >> (32 - chunkbits)            // boundary of a chunk
+	topmask   = 0xffffffff >> ((32 - chunkbits) % fanout) // boundary of the top level
 )
 
-func boundaryMask(level int) uint32 {
-	return 0xffffffff >> uint32(32-(chunkbits+level*fanout))
-}
-
-func sliceFile(path string) string {
+func Slice(path string) []byte {
 
 	fmt.Printf("splitting %s\n", path)
 
-	fi, err := os.Open(path)
+	f, err := os.Open(path)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() {
-		if err := fi.Close(); err != nil {
+		if err := f.Close(); err != nil {
 			log.Fatal(err)
 		}
 	}()
 
-	bufreader := bufio.NewReader(fi)
+	r := bufio.NewReader(f)
 
-	_, id, _, err := doSlice(bufreader, levelmax)
+	_, id, _, err := SliceUntil(r, topmask)
 
 	return id
 
 }
 
-func store(b []byte) string {
+func store(b []byte) []byte {
 	encoded := snappy.Encode(nil, b)
 	res := fmt.Sprintf("%x", sha1.Sum(encoded))
 	fmt.Printf("Storing %s\n", res)
-	return res
+	return []byte(res)
 }
 
-func doSlice(r *bufio.Reader, level int) (rollsum uint32, id string, n int, err error) {
+// Read the buffer until one of these conditions is met:
+// - The rolling checksum matches the mask
+// - The end of the buffer is reached
+// Exception: when the input mask is topmask, the read does not stop
+// until the end of the buffer
+//
+// Store the resulting intermediate metachunks, and return
+// - n the number of bytes consumed
+// - id the address of the stored metachunk
+// - rollsum the rolling checksum at the end of the metachunk
+// - err the error indicating whether the end of the buffer was reached
+func SliceUntil(r *bufio.Reader, mask uint32) (n uint64, id []byte, rollsum uint32, err error) {
 
-	m := boundaryMask(level)
-	isBoundary := func(rollsum uint32) bool { return rollsum&m == m }
+	if mask > chunkmask {
 
-	if level > 0 {
-
-		entries := make([][3]any, 0)
-		//entries := make(map[int]string)
-		offset := 0
+		s := NewSuperChunk()
+		offset := uint64(0)
 		for {
-			rollsum, id, n, err := doSlice(r, level-1)
-			entries = append(entries, [3]any{id, n, "S"})
-			//entries[offset] = id
-			offset += n
-			if (isBoundary(rollsum) && level < levelmax) || err != nil {
-				var buf bytes.Buffer
-				bencode.Marshal(&buf, entries)
-				resb := buf.Bytes()
-				println(string(resb))
-				//resb, _ := json.Marshal(entries)
-				id = store(resb)
-				return rollsum, id, offset, err
+			n, id, rollsum, err := SliceUntil(r, mask>>fanout)
+			metaType := byte('S')
+			if mask>>fanout == chunkmask {
+				metaType = byte('C')
 			}
+			s.AddChild(offset, metaType, id)
+			if ((rollsum&mask == mask) && mask < topmask) || err != nil {
+				id = store(s.Bytes())
+				return offset, id, rollsum, err
+			}
+			offset += n
 		}
 	} else {
+		// initially 128 bytes, capacity 4 * 8192
 		data := make([]byte, 128, 4*(1<<chunkbits))
 		hash := adler32.New()
 
+		// read the initial window
 		n, err := r.Read(data)
 		if err != nil {
+			// we read the file to its end, check if it had data
 			if err == io.EOF && n > 0 {
 				data = data[:n]
 				hash.Write(data)
-				return hash.Sum32(), store(data), n, err
+				return uint64(n), store(data), hash.Sum32(), err
 			}
-			return 0, "", 0, err
+			return 0, []byte(""), 0, err
 		}
 		hash.Write(data)
-		for !isBoundary(hash.Sum32()) {
+		for hash.Sum32()&mask != mask {
 			b, err := r.ReadByte()
 			if err != nil {
 				break
 			}
+			n += 1
 			hash.Roll(b)
 			data = append(data, b)
 		}
-		return hash.Sum32(), store(data), n, err
+		return uint64(n), store(data), hash.Sum32(), err
 	}
 
 }
 
-func slice(path string) string {
+func Archive(path string) []byte {
 	info, err := os.Lstat(path)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var res string
+	var res []byte
 
 	if info.IsDir() {
 		files, err := ioutil.ReadDir(path)
@@ -127,8 +133,8 @@ func slice(path string) string {
 		entries := make([]string, 0)
 
 		for _, f := range files {
-			s := slice(path + "/" + f.Name())
-			entries = append(entries, s)
+			s := Archive(path + "/" + f.Name())
+			entries = append(entries, string(s))
 		}
 
 		resb, err := json.Marshal(entries)
@@ -137,7 +143,7 @@ func slice(path string) string {
 		}
 		res = store(resb)
 	} else {
-		res = sliceFile(path)
+		res = Slice(path)
 	}
 
 	fmt.Printf("%s -> %s\n", path, res)

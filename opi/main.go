@@ -15,21 +15,31 @@ const (
 	`
 )
 
+func OpiServed() func() {
+	cmd := exec.Command("opi-serve")
+	err := cmd.Start()
+	if err != nil {
+		fmt.Errorf("%v", err)
+		return func() {}
+	}
+	return func() {
+		err := cmd.Process.Signal(os.Kill)
+		if err != nil {
+			fmt.Errorf("%v", err)
+		}
+	}
+}
+
 func main() {
 	if len(os.Args) != 3 {
 		fmt.Print(usage)
 		os.Exit(1)
 	}
 
-	cmd := exec.Command("opi-serve")
-	err := cmd.Start()
-	if err != nil {
-		fmt.Print(err)
-	}
+	defer OpiServed()()
 
 	if os.Args[1] == "archive" {
 		opi.Archive(os.Args[2])
 	}
 
-	cmd.Process.Kill()
 }

@@ -52,8 +52,7 @@ func (o *Opi) Save(b []byte) []byte {
 	value := snappy.Encode(nil, b)
 	hash := []byte(fmt.Sprintf("%x", sha512.Sum512(value)))
 
-	c := NewClient()
-	c.Set(hash, value)
+	o.Store.Set(hash, value)
 	return hash
 }
 

@@ -24,7 +24,15 @@ const (
 	topmask   = 0xffffffff >> ((32 - chunkbits) % fanout) // boundary of the top level
 )
 
-func Slice(path string) []byte {
+type Opi struct {
+	Store Storage
+}
+
+func NewOpi(s Storage) Timeline {
+	return &Opi{Store: s}
+}
+
+func (o *Opi) Slice(path string) []byte {
 	fmt.Printf("splitting %s\n", path)
 	f, err := os.Open(path)
 	if err != nil {
@@ -36,11 +44,11 @@ func Slice(path string) []byte {
 		}
 	}()
 	r := bufio.NewReader(f)
-	_, id, _, err := SliceUntil(r, topmask)
+	_, id, _, err := o.SliceUntil(r, topmask)
 	return id
 }
 
-func Store(b []byte) []byte {
+func (o *Opi) Save(b []byte) []byte {
 	value := snappy.Encode(nil, b)
 	hash := []byte(fmt.Sprintf("%x", sha512.Sum512(value)))
 
@@ -60,19 +68,19 @@ func Store(b []byte) []byte {
 // - addr the address of the stored metachunk
 // - rollsum the rolling checksum at the end of the metachunk
 // - err the error indicating whether the end of the buffer was reached
-func SliceUntil(r *bufio.Reader, mask uint32) (n uint64, addr []byte, rollsum uint32, err error) {
+func (o *Opi) SliceUntil(r *bufio.Reader, mask uint32) (n uint64, addr []byte, rollsum uint32, err error) {
 	if mask > chunkmask {
 		s := NewSuperChunk()
 		offset := uint64(0)
 		for {
-			n, addr, rollsum, err := SliceUntil(r, mask>>fanout)
+			n, addr, rollsum, err := o.SliceUntil(r, mask>>fanout)
 			metaType := byte('S')
 			if mask>>fanout == chunkmask {
 				metaType = byte('C')
 			}
 			s.AddChild(offset, metaType, addr)
 			if ((rollsum&mask == mask) && mask < topmask) || err != nil {
-				addr = Store(s.Bytes())
+				addr = o.Save(s.Bytes())
 				return offset, addr, rollsum, err
 			}
 			offset += n
@@ -91,7 +99,7 @@ func SliceUntil(r *bufio.Reader, mask uint32) (n uint64, addr []byte, rollsum ui
 			if err == io.EOF && n > 0 {
 				data = data[:n]
 				hash.Write(data)
-				return uint64(n), Store(data), hash.Sum32(), err
+				return uint64(n), o.Save(data), hash.Sum32(), err
 			}
 			return 0, []byte(""), 0, err
 		}
@@ -105,11 +113,11 @@ func SliceUntil(r *bufio.Reader, mask uint32) (n uint64, addr []byte, rollsum ui
 			hash.Roll(b)
 			data = append(data, b)
 		}
-		return uint64(n), Store(data), hash.Sum32(), err
+		return uint64(n), o.Save(data), hash.Sum32(), err
 	}
 }
 
-func Archive(path string) []byte {
+func (o *Opi) SliceAll(path string) []byte {
 	info, err := os.Lstat(path)
 	if err != nil {
 		log.Fatal(err)
@@ -122,17 +130,26 @@ func Archive(path string) []byte {
 		}
 		entries := make([]string, 0)
 		for _, f := range files {
-			s := Archive(path + "/" + f.Name())
+			s := o.SliceAll(path + "/" + f.Name())
 			entries = append(entries, string(s))
 		}
 		resb, err := json.Marshal(entries)
 		if err != nil {
 			log.Fatal(err)
 		}
-		res = Store(resb)
+		res = o.Save(resb)
 	} else {
-		res = Slice(path)
+		res = o.Slice(path)
 	}
 	fmt.Printf("%s -> %s\n", path, res)
 	return res
+}
+
+func (o *Opi) Archive(path string, name string) error {
+	o.SliceAll(path)
+	return nil
+}
+
+func (o *Opi) Restore(name string, path string) error {
+	return nil
 }

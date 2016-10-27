@@ -31,7 +31,7 @@ func OpiServed() func() {
 }
 
 func main() {
-	if len(os.Args) != 3 {
+	if len(os.Args) != 4 {
 		fmt.Print(usage)
 		os.Exit(1)
 	}
@@ -39,7 +39,8 @@ func main() {
 	defer OpiServed()()
 
 	if os.Args[1] == "archive" {
-		opi.Archive(os.Args[2])
+		o := opi.NewOpi(opi.NewClient())
+		o.Archive(os.Args[2], os.Args[3])
 	}
 
 }

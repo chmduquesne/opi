@@ -8,19 +8,18 @@ import (
 )
 
 type Client struct {
-	host string
+	http.Client
+	Host string
 }
 
 func NewClient() Storage {
-	return &Client{host: Host()}
-}
-
-func (c *Client) BaseURL() string {
-	return "http://" + c.host + "/"
+	return &Client{
+		Host: "http://" + Host() + "/",
+	}
 }
 
 func (c *Client) Get(key []byte) (value []byte, err error) {
-	resp, err := http.Get(c.BaseURL() + string(key))
+	resp, err := c.Client.Get(c.Host + string(key))
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +29,7 @@ func (c *Client) Get(key []byte) (value []byte, err error) {
 }
 
 func (c *Client) Set(key, value []byte) (err error) {
-	resp, err := http.Post(c.BaseURL()+string(key),
+	resp, err := c.Client.Post(c.Host+string(key),
 		"application/x-www-form-urlencoded",
 		bytes.NewReader(value))
 	if err != nil {
@@ -45,5 +44,9 @@ func (c *Client) Del(key []byte) (err error) {
 }
 
 func (c *Client) Hit(key []byte) (err error) {
+	return nil
+}
+
+func (c *Client) Close() (err error) {
 	return nil
 }

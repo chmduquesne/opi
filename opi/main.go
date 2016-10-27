@@ -36,10 +36,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	defer OpiServed()()
+	//defer OpiServed()()
 
 	if os.Args[1] == "archive" {
-		o := opi.NewOpi(opi.NewClient())
+		s := opi.NewDB()
+		defer s.Close()
+		o := opi.NewOpi(s)
 		o.Archive(os.Args[2], os.Args[3])
 	}
 

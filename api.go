@@ -10,4 +10,5 @@ type Storage interface {
 	Set(key []byte, value []byte) (err error)
 	Del(key []byte) (err error)
 	Hit(key []byte) (err error)
+	Close() (err error)
 }

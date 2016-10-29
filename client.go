@@ -2,7 +2,6 @@ package opi
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 )
@@ -33,10 +32,10 @@ func (c *Client) Set(key, value []byte) (err error) {
 		"application/x-www-form-urlencoded",
 		bytes.NewReader(value))
 	if err != nil {
-		fmt.Errorf("%v", err)
+		return err
 	}
 	defer resp.Body.Close()
-	return err
+	return
 }
 
 func (c *Client) Del(key []byte) (err error) {

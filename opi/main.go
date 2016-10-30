@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
+	"syscall"
 
 	"github.com/chmduquesne/opi"
 )
@@ -16,18 +18,28 @@ const (
 )
 
 func OpiServed() func() {
+	fmt.Println("Starting opi-serve")
 	cmd := exec.Command("opi-serve")
 	err := cmd.Start()
-	if err != nil {
-		fmt.Errorf("%v", err)
-		return func() {}
-	}
-	return func() {
-		err := cmd.Process.Signal(os.Kill)
+	stop := func() {
+		fmt.Println("Stopping opi-serve")
 		if err != nil {
 			fmt.Errorf("%v", err)
+		} else {
+			err = cmd.Process.Signal(os.Kill)
+			if err != nil {
+				fmt.Errorf("%v", err)
+			}
 		}
 	}
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		<-c
+		stop()
+		os.Exit(1)
+	}()
+	return stop
 }
 
 func main() {
@@ -36,10 +48,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	//defer OpiServed()()
+	defer OpiServed()()
 
 	if os.Args[1] == "archive" {
-		s := opi.NewDB()
+		s := opi.NewClient()
 		defer s.Close()
 		o := opi.NewOpi(s)
 		o.Archive(os.Args[2], os.Args[3])

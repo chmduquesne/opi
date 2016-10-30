@@ -37,7 +37,6 @@ type MetaChunkInfo struct {
 	MetaType byte
 	Addr     []byte
 	// Not serialized
-	Size    uint64
 	RollSum uint32
 }
 

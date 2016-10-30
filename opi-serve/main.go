@@ -37,7 +37,7 @@ func (s *Storage) Close() error {
 }
 
 func (s *Storage) Set(key, value []byte) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.db.Batch(func(tx *bolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists(s.bucketName)
 		if err != nil {
 			return err
@@ -70,7 +70,7 @@ func main() {
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		key := r.URL.Path[1:] // remove the '/' prefix
-		log.Printf("%v %v", r.Method, r.URL.Path)
+		//log.Printf("%v %v", r.Method, r.URL.Path)
 		switch {
 		case r.Method == "GET":
 			value, err := s.Get([]byte(key))

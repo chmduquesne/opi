@@ -79,4 +79,7 @@ With X=0.999, we would need k>=7, and with X=0.9999, we would need k>=9.
 Since we are computer scientists and we love powers of 2, let's pick k=8.
 
 So there we go: If we cut after 8 times the length of the average slice,
-we have more than 99.9% chance to have seen a boundary already.
+we have more than 99.9% chance to have seen a boundary already. So the
+maximum chunk size is:
+
+    8 * 2^c = 2^3 * 2^c = 2^(c+3)

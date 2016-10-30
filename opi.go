@@ -45,8 +45,8 @@ func (o *Opi) Slice(path string) []byte {
 			log.Fatal(err)
 		}
 	}()
-	r := bufio.NewReader(f)
-	n, id, _, _, err := o.SliceUntil(r, topMask)
+	stream := bufio.NewReader(f)
+	n, id, _, _, err := o.SliceUntil(stream, topMask)
 	fmt.Printf("%s (%v) -> %s\n", path, bytefmt.ByteSize(n), id)
 	return id
 }
@@ -69,20 +69,23 @@ func (o *Opi) Save(b []byte) []byte {
 // Store the resulting intermediate metachunks, and return
 // - n the number of bytes consumed from the buffer
 // - addr the address of the stored metachunk
+// - metatype the type of the stored metachunk ('C' or 'S')
 // - rollsum the rolling checksum at the end of the metachunk
 // - err the error indicating whether the end of the buffer was reached
-func (o *Opi) SliceUntil(r *bufio.Reader, mask uint32) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
+func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
 	if mask > chunkMask {
+		// SuperChunk
 		s := NewSuperChunk()
 		offset := uint64(0)
 		for {
-			n, addr, metatype, rollsum, err = o.SliceUntil(r, mask>>fanout)
+			n, addr, metatype, rollsum, err = o.SliceUntil(stream, mask>>fanout)
 			if err != nil {
 				return
 			}
 			s.AddChild(offset, metatype, addr)
 			offset += n
 			if ((rollsum&mask == mask) && mask < topMask) || err != nil {
+				// If we have exactly 1 child, return it directly
 				if len(s.Children) == 1 {
 					return
 				}
@@ -91,25 +94,32 @@ func (o *Opi) SliceUntil(r *bufio.Reader, mask uint32) (n uint64, addr []byte, m
 			}
 		}
 	} else {
+		// Chunk
 		data := make([]byte, windowSize, maxChunkSize)
 		roll := adler32.New()
 
 		// read the initial window
 		sz := 0
-		sz, err = r.Read(data)
+		sz, err = stream.Read(data)
 		n = uint64(sz)
+
+		// EOF during initial window
 		if err != nil {
-			// we read the file to its end, check if it had data
-			if err == io.EOF && n > 0 {
+			if err == io.EOF {
 				data = data[:n]
-				roll.Write(data)
-				return n, o.Save(data), byte('C'), roll.Sum32(), err
+				rollsum := 0
+				if n > 0 {
+					roll.Write(data)
+					rollsum = roll.Sum32()
+				}
+				return n, o.Save(data), byte('C'), rollsum, err
 			}
 			return
 		}
+		// Roll until boundary or EOF
 		roll.Write(data)
-		for roll.Sum32()&mask != mask {
-			b, err := r.ReadByte()
+		for roll.Sum32()&mask != mask && n < maxChunkSize {
+			b, err := stream.ReadByte()
 			if err != nil {
 				break
 			}

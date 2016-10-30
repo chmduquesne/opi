@@ -2,11 +2,10 @@ package opi
 
 import (
 	"bytes"
+	"time"
 
 	bencode "github.com/jackpal/bencode-go"
 )
-
-type Any interface{}
 
 type FSObject interface {
 	Bytes() []byte
@@ -76,4 +75,28 @@ func ReadSuperChunk(from []byte) *SuperChunk {
 
 func NewSuperChunk() *SuperChunk {
 	return &SuperChunk{}
+}
+
+type Xattr struct {
+	attributes map[string]string
+}
+
+type DirEntry struct {
+	FileType byte
+	Mode     uint32
+	Name     []byte
+	Xattr    []byte
+	Address  []byte
+}
+
+type Dir struct {
+	Entries []DirEntry
+}
+
+type Commit struct {
+	Date    time.Time
+	Tree    []byte
+	Host    string
+	Replica []byte
+	Parents [][]byte
 }

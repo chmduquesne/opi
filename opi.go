@@ -35,7 +35,6 @@ func NewOpi(s Storage) Timeline {
 }
 
 func (o *Opi) Slice(path string) []byte {
-	fmt.Printf("splitting %s\n", path)
 	f, err := os.Open(path)
 	if err != nil {
 		log.Fatal(err)
@@ -56,6 +55,7 @@ func (o *Opi) Save(b []byte) []byte {
 	value := b
 	hash := []byte(fmt.Sprintf("%x", sha512.Sum512(value)))
 
+	//fmt.Println(string(hash))
 	//o.Store.Set(hash, value)
 	return hash
 }
@@ -74,14 +74,10 @@ func (o *Opi) Save(b []byte) []byte {
 // - err the error indicating whether the end of the buffer was reached
 func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
 	if mask > chunkMask {
-		// SuperChunk
 		s := NewSuperChunk()
 		offset := uint64(0)
 		for {
 			n, addr, metatype, rollsum, err = o.SliceUntil(stream, mask>>fanout)
-			if err != nil {
-				return
-			}
 			s.AddChild(offset, metatype, addr)
 			offset += n
 			if ((rollsum&mask == mask) && mask < topMask) || err != nil {
@@ -89,8 +85,7 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 				if len(s.Children) == 1 {
 					return
 				}
-				addr = o.Save(s.Bytes())
-				return offset, addr, byte('S'), rollsum, err
+				return offset, o.Save(s.Bytes()), byte('S'), rollsum, err
 			}
 		}
 	} else {
@@ -107,7 +102,7 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 		if err != nil {
 			if err == io.EOF {
 				data = data[:n]
-				rollsum := 0
+				rollsum := uint32(0)
 				if n > 0 {
 					roll.Write(data)
 					rollsum = roll.Sum32()
@@ -137,7 +132,8 @@ func (o *Opi) SliceAll(path string) []byte {
 		log.Fatal(err)
 	}
 	var res []byte
-	if info.IsDir() {
+	switch {
+	case info.Mode()&os.ModeType == os.ModeDir:
 		files, err := ioutil.ReadDir(path)
 		if err != nil {
 			log.Fatal(err)
@@ -152,8 +148,12 @@ func (o *Opi) SliceAll(path string) []byte {
 			log.Fatal(err)
 		}
 		res = o.Save(resb)
-	} else {
+	case info.Mode()&os.ModeType == os.ModeSymlink:
+		fmt.Printf("symlink")
+	case info.Mode()&os.ModeType == 0:
 		res = o.Slice(path)
+	default:
+		fmt.Printf("%s: file type not supported\n", path)
 	}
 	return res
 }

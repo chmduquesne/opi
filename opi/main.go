@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime/pprof"
 	"syscall"
 
 	"github.com/chmduquesne/opi"
@@ -49,6 +51,16 @@ func main() {
 	}
 
 	defer OpiServed()()
+
+	profile := os.Getenv("PROFILE")
+	if profile != "" {
+		f, err := os.Create(profile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	if os.Args[1] == "archive" {
 		s := opi.NewClient()

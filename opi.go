@@ -56,7 +56,7 @@ func (o *Opi) Save(b []byte) []byte {
 	hash := []byte(fmt.Sprintf("%x", sha512.Sum512(value)))
 
 	//fmt.Println(string(hash))
-	//o.Store.Set(hash, value)
+	o.Store.Set(hash, value)
 	return hash
 }
 

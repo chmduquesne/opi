@@ -86,7 +86,18 @@ type DirEntry struct {
 	Mode     uint32
 	Name     []byte
 	Xattr    []byte
-	Address  []byte
+	Addr     []byte
+}
+
+func (d *Dir) AddEntry(fileType byte, mode uint32, name []byte, xattr []byte, addr []byte) {
+	entry := DirEntry{
+		FileType: fileType,
+		Mode:     mode,
+		Name:     name,
+		Xattr:    xattr,
+		Addr:     addr,
+	}
+	d.Entries = append(d.Entries, entry)
 }
 
 type Dir struct {

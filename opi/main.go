@@ -65,7 +65,8 @@ func main() {
 	if os.Args[1] == "archive" {
 		s := opi.NewClient()
 		defer s.Close()
-		o := opi.NewOpi(s)
+		c := opi.NewSimpleCodec()
+		o := opi.NewOpi(s, c)
 		o.Archive(os.Args[2], os.Args[3])
 	}
 

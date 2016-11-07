@@ -28,10 +28,11 @@ const (
 
 type Opi struct {
 	Store Storage
+	Codec Codec
 }
 
-func NewOpi(s Storage) Timeline {
-	return &Opi{Store: s}
+func NewOpi(s Storage, c Codec) Timeline {
+	return &Opi{Store: s, Codec: c}
 }
 
 func (o *Opi) Slice(path string) []byte {
@@ -85,7 +86,7 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 				if len(s.Children) == 1 {
 					return
 				}
-				return offset, o.Save(s.Bytes()), byte('S'), rollsum, err
+				return offset, o.Save(o.Codec.Encode(s.toGoObj())), byte('S'), rollsum, err
 			}
 		}
 	} else {
@@ -126,7 +127,7 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 	}
 }
 
-func (o *Opi) SliceAll(path string) []byte {
+func (o *Opi) Snapshot(path string) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		log.Fatal(err)
@@ -138,9 +139,10 @@ func (o *Opi) SliceAll(path string) []byte {
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		entries := make([]string, 0)
 		for _, f := range files {
-			s := o.SliceAll(path + "/" + f.Name())
+			s, _ := o.Snapshot(path + "/" + f.Name())
 			entries = append(entries, string(s))
 		}
 		resb, err := json.Marshal(entries)
@@ -155,11 +157,11 @@ func (o *Opi) SliceAll(path string) []byte {
 	default:
 		fmt.Printf("%s: file type not supported\n", path)
 	}
-	return res
+	return res, nil
 }
 
 func (o *Opi) Archive(path string, name string) error {
-	o.SliceAll(path)
+	o.Snapshot(path)
 	return nil
 }
 

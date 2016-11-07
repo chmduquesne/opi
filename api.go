@@ -12,3 +12,8 @@ type Storage interface {
 	Hit(key []byte) (err error)
 	Close() (err error)
 }
+
+type Codec interface {
+	Encode(obj interface{}) (encoded []byte)
+	Decode(encoded []byte) (obj interface{})
+}

@@ -1,14 +1,9 @@
 package opi
 
-import (
-	"bytes"
-	"time"
-
-	bencode "github.com/jackpal/bencode-go"
-)
+import "time"
 
 type FSObject interface {
-	Bytes() []byte
+	toGoObj() interface{}
 }
 
 // Chunk
@@ -17,12 +12,8 @@ type Chunk struct {
 	data []byte
 }
 
-func (c *Chunk) Bytes() []byte {
+func (c *Chunk) toGoObj() interface{} {
 	return c.data
-}
-
-func ReadChunk(from []byte) *Chunk {
-	return &Chunk{data: from}
 }
 
 func NewChunk() *Chunk {
@@ -35,8 +26,6 @@ type MetaChunkInfo struct {
 	Offset   uint64
 	MetaType byte
 	Addr     []byte
-	// Not serialized
-	RollSum uint32
 }
 
 type SuperChunk struct {
@@ -52,25 +41,12 @@ func (s *SuperChunk) AddChild(offset uint64, metaType byte, addr []byte) {
 	s.Children = append(s.Children, m)
 }
 
-func (s *SuperChunk) Bytes() []byte {
-	var buf bytes.Buffer
-	var compacted [][3]interface{}
+func (s *SuperChunk) toGoObj() interface{} {
+	var obj [][3]interface{}
 	for _, c := range s.Children {
-		compacted = append(compacted, [3]interface{}{c.Offset, c.MetaType, c.Addr})
+		obj = append(obj, [3]interface{}{c.Offset, c.MetaType, c.Addr})
 	}
-	bencode.Marshal(&buf, compacted)
-	return buf.Bytes()
-}
-
-func ReadSuperChunk(from []byte) *SuperChunk {
-	buf := bytes.NewReader(from)
-	var raw [][3]interface{}
-	bencode.Unmarshal(buf, &raw)
-	s := SuperChunk{}
-	for _, r := range raw {
-		s.AddChild(uint64(r[0].(int64)), byte(r[1].(int64)), []byte(r[2].(string)))
-	}
-	return &s
+	return obj
 }
 
 func NewSuperChunk() *SuperChunk {
@@ -102,6 +78,10 @@ func (d *Dir) AddEntry(fileType byte, mode uint32, name []byte, xattr []byte, ad
 
 type Dir struct {
 	Entries []DirEntry
+}
+
+func NewDir() *Dir {
+	return &Dir{}
 }
 
 type Commit struct {

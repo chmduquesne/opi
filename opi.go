@@ -3,7 +3,6 @@ package opi
 import (
 	"bufio"
 	"crypto/sha512"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -35,7 +34,7 @@ func NewOpi(s Storage, c Codec) Timeline {
 	return &Opi{Store: s, Codec: c}
 }
 
-func (o *Opi) Slice(path string) []byte {
+func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		log.Fatal(err)
@@ -46,9 +45,9 @@ func (o *Opi) Slice(path string) []byte {
 		}
 	}()
 	stream := bufio.NewReader(f)
-	n, id, _, _, err := o.SliceUntil(stream, topMask)
-	fmt.Printf("%s (%v) -> %s\n", path, bytefmt.ByteSize(n), id)
-	return id
+	n, addr, filetype, _, err := o.SliceUntil(stream, topMask)
+	fmt.Printf("%s (%v) -> %s\n", path, bytefmt.ByteSize(n), addr)
+	return addr, filetype, err
 }
 
 func (o *Opi) Save(b []byte) []byte {
@@ -127,37 +126,43 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 	}
 }
 
-func (o *Opi) Snapshot(path string) ([]byte, error) {
+func (o *Opi) Snapshot(path string) (addr []byte, filetype byte, err error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var res []byte
 	switch {
 	case info.Mode()&os.ModeType == os.ModeDir:
 		files, err := ioutil.ReadDir(path)
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		entries := make([]string, 0)
+		d := NewDir()
 		for _, f := range files {
-			s, _ := o.Snapshot(path + "/" + f.Name())
-			entries = append(entries, string(s))
+			path := path + "/" + f.Name()
+			info, err := os.Lstat(path)
+			if err != nil {
+				log.Fatal(err)
+			}
+			addr, filetype, err := o.Snapshot(path + "/" + f.Name())
+			if err != nil {
+				log.Fatal(err)
+			}
+			d.AddEntry(filetype, uint32(info.Mode()&os.ModePerm), []byte(f.Name()), nil, addr)
 		}
-		resb, err := json.Marshal(entries)
+		return o.Save(o.Codec.Encode(d.toGoObj())), byte('d'), err
+	case info.Mode()&os.ModeType == os.ModeSymlink:
+		target, err := os.Readlink(path)
 		if err != nil {
 			log.Fatal(err)
 		}
-		res = o.Save(resb)
-	case info.Mode()&os.ModeType == os.ModeSymlink:
-		fmt.Printf("symlink")
+		return o.Save([]byte(target)), byte('l'), err
 	case info.Mode()&os.ModeType == 0:
-		res = o.Slice(path)
+		return o.Slice(path)
 	default:
 		fmt.Printf("%s: file type not supported\n", path)
 	}
-	return res, nil
+	return
 }
 
 func (o *Opi) Archive(path string, name string) error {

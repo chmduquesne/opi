@@ -80,6 +80,14 @@ type Dir struct {
 	Entries []DirEntry
 }
 
+func (d *Dir) toGoObj() interface{} {
+	var obj [][5]interface{}
+	for _, e := range d.Entries {
+		obj = append(obj, [5]interface{}{e.FileType, e.Mode, e.Name, e.Xattr, e.Addr})
+	}
+	return obj
+}
+
 func NewDir() *Dir {
 	return &Dir{}
 }

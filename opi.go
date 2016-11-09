@@ -3,11 +3,13 @@ package opi
 import (
 	"bufio"
 	"crypto/sha512"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
+	"time"
 
 	"github.com/chmduquesne/rollinghash/adler32"
 	"github.com/cloudfoundry/bytefmt"
@@ -166,7 +168,19 @@ func (o *Opi) Snapshot(path string) (addr []byte, filetype byte, err error) {
 }
 
 func (o *Opi) Archive(path string, name string) error {
-	o.Snapshot(path)
+	addr, filetype, err := o.Snapshot(path)
+	if filetype != byte('d') {
+		return errors.New("Can only archive a directory")
+	}
+	if err != nil {
+		return err
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		return err
+	}
+	c := NewCommit(time.Now(), addr, []byte(hostname), []byte(hostname), nil)
+	_ = c
 	return nil
 }
 

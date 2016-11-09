@@ -95,7 +95,17 @@ func NewDir() *Dir {
 type Commit struct {
 	Date    time.Time
 	Tree    []byte
-	Host    string
+	Host    []byte
 	Replica []byte
 	Parents [][]byte
+}
+
+func NewCommit(date time.Time, tree []byte, host []byte, replica []byte, parents [][]byte) *Commit {
+	return &Commit{
+		Date:    date,
+		Tree:    tree,
+		Host:    host,
+		Replica: replica,
+		Parents: parents,
+	}
 }

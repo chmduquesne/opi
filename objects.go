@@ -1,6 +1,9 @@
 package opi
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type FSObject interface {
 	toGoObj() interface{}
@@ -98,6 +101,10 @@ type Commit struct {
 	Host    []byte
 	Replica []byte
 	Parents [][]byte
+}
+
+func (c *Commit) toGoObj() interface{} {
+	return []interface{}{[]byte(fmt.Sprint(c.Date)), c.Tree, c.Host, c.Replica, c.Parents}
 }
 
 func NewCommit(date time.Time, tree []byte, host []byte, replica []byte, parents [][]byte) *Commit {

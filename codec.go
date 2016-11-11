@@ -8,17 +8,23 @@ import (
 
 type SimpleCodec struct{}
 
-func (c *SimpleCodec) Encode(obj interface{}) []byte {
+func (c *SimpleCodec) Encode(obj interface{}) ([]byte, error) {
 	var buf bytes.Buffer
-	bencode.Marshal(&buf, obj)
-	return buf.Bytes()
+	err := bencode.Marshal(&buf, obj)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
-func (c *SimpleCodec) Decode(encoded []byte) interface{} {
+func (c *SimpleCodec) Decode(encoded []byte) (interface{}, error) {
 	buf := bytes.NewReader(encoded)
 	var obj interface{}
-	bencode.Unmarshal(buf, &obj)
-	return obj
+	err := bencode.Unmarshal(buf, &obj)
+	if err != nil {
+		return nil, err
+	}
+	return obj, nil
 }
 
 func NewSimpleCodec() Codec {

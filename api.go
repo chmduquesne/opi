@@ -14,6 +14,6 @@ type Storage interface {
 }
 
 type Codec interface {
-	Encode(obj interface{}) (encoded []byte)
-	Decode(encoded []byte) (obj interface{})
+	Encode(obj interface{}) (encoded []byte, err error)
+	Decode(encoded []byte) (obj interface{}, err error)
 }

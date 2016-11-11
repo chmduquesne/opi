@@ -67,7 +67,21 @@ func main() {
 		defer s.Close()
 		c := opi.NewSimpleCodec()
 		o := opi.NewOpi(s, c)
-		o.Archive(os.Args[2], os.Args[3])
+		err := o.Archive(os.Args[2], os.Args[3])
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+
+	if os.Args[1] == "restore" {
+		s := opi.NewClient()
+		defer s.Close()
+		c := opi.NewSimpleCodec()
+		o := opi.NewOpi(s, c)
+		err := o.Restore(os.Args[2], os.Args[3])
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 
 }

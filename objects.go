@@ -1,6 +1,7 @@
 package opi
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -115,4 +116,19 @@ func NewCommit(date time.Time, tree []byte, host []byte, replica []byte, parents
 		Replica: replica,
 		Parents: parents,
 	}
+}
+
+func ReadCommit(obj interface{}) (*Commit, error) {
+	data, err := obj.([]interface{})
+	_ = data
+	_ = err
+	return nil, nil
+}
+
+func ReadAddr(obj interface{}) ([]byte, error) {
+	addr_str, ok := obj.(string)
+	if !ok {
+		return nil, errors.New("Could not read address")
+	}
+	return []byte(addr_str), nil
 }

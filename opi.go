@@ -28,12 +28,12 @@ const (
 )
 
 type Opi struct {
-	Store Storage
-	Codec Codec
+	Storage
+	Codec
 }
 
 func NewOpi(s Storage, c Codec) Timeline {
-	return &Opi{Store: s, Codec: c}
+	return &Opi{Storage: s, Codec: c}
 }
 
 func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
@@ -49,6 +49,9 @@ func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
 	stream := bufio.NewReader(f)
 	n, addr, filetype, _, err := o.SliceUntil(stream, topMask)
 	fmt.Printf("%s (%v) -> %s\n", path, bytefmt.ByteSize(n), addr)
+	if err == io.EOF {
+		err = nil
+	}
 	return addr, filetype, err
 }
 
@@ -58,8 +61,22 @@ func (o *Opi) Save(b []byte) []byte {
 	hash := []byte(fmt.Sprintf("%x", sha512.Sum512(value)))
 
 	//fmt.Println(string(hash))
-	o.Store.Set(hash, value)
+	o.Set(hash, value)
 	return hash
+}
+
+func (o *Opi) Serialize(f FSObject) ([]byte, error) {
+	obj := f.toGoObj()
+	value, err := o.Encode(obj)
+	if err != nil {
+		return nil, err
+	}
+	addr := []byte(fmt.Sprintf("%x", sha512.Sum512(value)))
+	err = o.Set(addr, value)
+	if err != nil {
+		return nil, err
+	}
+	return addr, nil
 }
 
 // Read the buffer until one of these conditions is met:
@@ -87,7 +104,8 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 				if len(s.Children) == 1 {
 					return
 				}
-				return offset, o.Save(o.Codec.Encode(s.toGoObj())), byte('S'), rollsum, err
+				addr, err = o.Serialize(s)
+				return offset, addr, byte('S'), rollsum, err
 			}
 		}
 	} else {
@@ -141,8 +159,7 @@ func (o *Opi) Snapshot(path string) (addr []byte, filetype byte, err error) {
 		}
 		d := NewDir()
 		for _, f := range files {
-			path := path + "/" + f.Name()
-			info, err := os.Lstat(path)
+			info, err := os.Lstat(path + "/" + f.Name())
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -152,7 +169,8 @@ func (o *Opi) Snapshot(path string) (addr []byte, filetype byte, err error) {
 			}
 			d.AddEntry(filetype, uint32(info.Mode()&os.ModePerm), []byte(f.Name()), nil, addr)
 		}
-		return o.Save(o.Codec.Encode(d.toGoObj())), byte('d'), err
+		addr, err := o.Serialize(d)
+		return addr, byte('d'), err
 	case info.Mode()&os.ModeType == os.ModeSymlink:
 		target, err := os.Readlink(path)
 		if err != nil {
@@ -180,10 +198,48 @@ func (o *Opi) Archive(path string, name string) error {
 		return err
 	}
 	c := NewCommit(time.Now(), addr, []byte(hostname), []byte(hostname), nil)
-	_ = c
+	addr, err = o.Serialize(c)
+	if err != nil {
+		return err
+	}
+	value, err := o.Encode(addr)
+	if err != nil {
+		return err
+	}
+	err = o.Set([]byte(name), value)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (o *Opi) Restore(name string, path string) error {
+	// address of the top commit
+	data, err := o.Get([]byte(name))
+	if err != nil {
+		return err
+	}
+	obj, err := o.Decode(data)
+	if err != nil {
+		return err
+	}
+	addr, err := ReadAddr(obj)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Top commit address: ", addr)
+
+	// top commit
+	data, err = o.Get(addr)
+	if err != nil {
+		return err
+	}
+	obj, err = o.Decode(data)
+	c, err := ReadCommit(obj)
+	if c != nil {
+		fmt.Println("commits point to ", c.Tree)
+	}
+
+	fmt.Print(string(addr))
 	return nil
 }

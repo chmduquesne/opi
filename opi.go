@@ -227,7 +227,7 @@ func (o *Opi) Restore(name string, path string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Top commit address: ", addr)
+	fmt.Println("Top commit address: ", string(addr))
 
 	// top commit
 	data, err = o.Get(addr)
@@ -235,11 +235,14 @@ func (o *Opi) Restore(name string, path string) error {
 		return err
 	}
 	obj, err = o.Decode(data)
-	c, err := ReadCommit(obj)
-	if c != nil {
-		fmt.Println("commits point to ", c.Tree)
+	if err != nil {
+		return err
 	}
+	c, err := ReadCommit(obj)
+	if err != nil {
+		return err
+	}
+	fmt.Println("commits point to ", string(c.Tree))
 
-	fmt.Print(string(addr))
 	return nil
 }

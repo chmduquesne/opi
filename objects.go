@@ -105,7 +105,13 @@ type Commit struct {
 }
 
 func (c *Commit) toGoObj() interface{} {
-	return []interface{}{[]byte(fmt.Sprint(c.Date)), c.Tree, c.Host, c.Replica, c.Parents}
+	return [5]interface{}{
+		c.Date.Format(time.UnixDate),
+		c.Tree,
+		c.Host,
+		c.Replica,
+		c.Parents,
+	}
 }
 
 func NewCommit(date time.Time, tree []byte, host []byte, replica []byte, parents [][]byte) *Commit {
@@ -119,10 +125,39 @@ func NewCommit(date time.Time, tree []byte, host []byte, replica []byte, parents
 }
 
 func ReadCommit(obj interface{}) (*Commit, error) {
-	data, err := obj.([]interface{})
-	_ = data
-	_ = err
-	return nil, nil
+	data, ok := obj.([]interface{})
+	if !ok {
+		fmt.Print(obj)
+		return nil, errors.New("Could not parse commit")
+	}
+	if len(data) != 5 {
+		return nil, errors.New("Commit does not have the right number of fields")
+	}
+	date, ok := data[0].(string)
+	if !ok {
+		return nil, errors.New("Could not get date as string")
+	}
+	commitDate, err := time.Parse(time.UnixDate, date)
+	if err != nil {
+		return nil, err
+	}
+	tree, ok := data[1].(string)
+	if !ok {
+		return nil, errors.New("Could not get tree as string")
+	}
+	host, ok := data[2].(string)
+	if !ok {
+		return nil, errors.New("Could not get host as string")
+	}
+	c := &Commit{
+		Date:    commitDate,
+		Tree:    []byte(tree),
+		Host:    []byte(host),
+		Replica: nil,
+		Parents: nil,
+	}
+
+	return c, nil
 }
 
 func ReadAddr(obj interface{}) ([]byte, error) {

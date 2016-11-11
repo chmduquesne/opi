@@ -19,12 +19,7 @@ func (c *SimpleCodec) Encode(obj interface{}) ([]byte, error) {
 
 func (c *SimpleCodec) Decode(encoded []byte) (interface{}, error) {
 	buf := bytes.NewReader(encoded)
-	var obj interface{}
-	err := bencode.Unmarshal(buf, &obj)
-	if err != nil {
-		return nil, err
-	}
-	return obj, nil
+	return bencode.Decode(buf)
 }
 
 func NewSimpleCodec() Codec {

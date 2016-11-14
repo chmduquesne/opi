@@ -1,4 +1,5 @@
 language: go
 
 script:
-    test -v ./...
+    go test -v ./...
+    opi archive ${TRAVIS_BUILD_DIR} test

@@ -257,7 +257,7 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 		return err
 	}
 	for _, c := range d.Entries {
-		fmt.Println(string(c.Name), c.Addr)
+		fmt.Println(string(c.Name), string(c.Addr))
 	}
 	return nil
 }

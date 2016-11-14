@@ -79,6 +79,14 @@ func (o *Opi) Serialize(f FSObject) ([]byte, error) {
 	return addr, nil
 }
 
+func (o *Opi) DeSerialize(addr []byte) (obj interface{}, err error) {
+	data, err := o.Get(addr)
+	if err != nil {
+		return nil, err
+	}
+	return o.Decode(data)
+}
+
 // Read the buffer until one of these conditions is met:
 // - The rolling checksum matches the mask
 // - The end of the buffer is reached
@@ -167,7 +175,7 @@ func (o *Opi) Snapshot(path string) (addr []byte, filetype byte, err error) {
 			if err != nil {
 				log.Fatal(err)
 			}
-			d.AddEntry(filetype, uint32(info.Mode()&os.ModePerm), []byte(f.Name()), nil, addr)
+			d.AddEntry(filetype, uint32(info.Mode()&os.ModePerm), []byte(f.Name()), []byte("xattr"), addr)
 		}
 		addr, err := o.Serialize(d)
 		return addr, byte('d'), err
@@ -215,11 +223,7 @@ func (o *Opi) Archive(path string, name string) error {
 
 func (o *Opi) Restore(name string, path string) error {
 	// address of the top commit
-	data, err := o.Get([]byte(name))
-	if err != nil {
-		return err
-	}
-	obj, err := o.Decode(data)
+	obj, err := o.DeSerialize([]byte(name))
 	if err != nil {
 		return err
 	}
@@ -230,11 +234,7 @@ func (o *Opi) Restore(name string, path string) error {
 	fmt.Println("Top commit address: ", string(addr))
 
 	// top commit
-	data, err = o.Get(addr)
-	if err != nil {
-		return err
-	}
-	obj, err = o.Decode(data)
+	obj, err = o.DeSerialize(addr)
 	if err != nil {
 		return err
 	}
@@ -244,5 +244,20 @@ func (o *Opi) Restore(name string, path string) error {
 	}
 	fmt.Println("commits point to ", string(c.Tree))
 
+	return o.Rebuild(c.Tree, path)
+}
+
+func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
+	obj, err := o.DeSerialize(addr)
+	if err != nil {
+		return err
+	}
+	d, err := ReadDir(obj)
+	if err != nil {
+		return err
+	}
+	for _, c := range d.Entries {
+		fmt.Println(string(c.Name), c.Addr)
+	}
 	return nil
 }

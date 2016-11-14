@@ -92,6 +92,47 @@ func (d *Dir) toGoObj() interface{} {
 	return obj
 }
 
+func ReadDir(obj interface{}) (*Dir, error) {
+	d := NewDir()
+	data, ok := obj.([]interface{})
+	if !ok {
+		return nil, errors.New("ReadDir: Can't parse dir object to a list")
+	}
+	for _, e := range data {
+		attributes := e.([]interface{})
+		if len(attributes) != 5 {
+			return nil, errors.New("ReadDir: Entry does not have 5 fields")
+		}
+		ft, ok := attributes[0].(int64)
+		if !ok {
+			return nil, errors.New("ReadDir: Could not parse file type")
+		}
+		fileType := byte(ft)
+		m, ok := attributes[1].(int64)
+		if !ok {
+			return nil, errors.New("ReadDir: Could not parse mode")
+		}
+		mode := uint32(m)
+		n, ok := attributes[2].(string)
+		if !ok {
+			return nil, errors.New("ReadDir: Could not parse name")
+		}
+		name := []byte(n)
+		x, ok := attributes[3].(string)
+		if !ok {
+			return nil, errors.New("ReadDir: Could not parse xattr")
+		}
+		xattr := []byte(x)
+		a, ok := attributes[4].(string)
+		if !ok {
+			return nil, errors.New("ReadDir: Could not parse address")
+		}
+		addr := []byte(a)
+		d.AddEntry(fileType, mode, name, xattr, addr)
+	}
+	return d, nil
+}
+
 func NewDir() *Dir {
 	return &Dir{}
 }

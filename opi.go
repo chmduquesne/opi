@@ -55,16 +55,6 @@ func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
 	return addr, filetype, err
 }
 
-func (o *Opi) Save(b []byte) []byte {
-	//value := snappy.Encode(nil, b)
-	value := b
-	hash := []byte(fmt.Sprintf("%x", sha512.Sum512(value)))
-
-	//fmt.Println(string(hash))
-	o.Set(hash, value)
-	return hash
-}
-
 func (o *Opi) Serialize(f FSObject) ([]byte, error) {
 	obj := f.toGoObj()
 	value, err := o.Encode(obj)
@@ -72,6 +62,7 @@ func (o *Opi) Serialize(f FSObject) ([]byte, error) {
 		return nil, err
 	}
 	addr := []byte(fmt.Sprintf("%x", sha512.Sum512(value)))
+	//fmt.Println(string(addr))
 	err = o.Set(addr, value)
 	if err != nil {
 		return nil, err
@@ -135,7 +126,9 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 					roll.Write(data)
 					rollsum = roll.Sum32()
 				}
-				return n, o.Save(data), byte('C'), rollsum, err
+				c := NewChunk(data)
+				addr, _ = o.Serialize(c)
+				return n, addr, byte('C'), rollsum, err
 			}
 			return
 		}
@@ -150,7 +143,9 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 			roll.Roll(b)
 			data = append(data, b)
 		}
-		return uint64(n), o.Save(data), 0, roll.Sum32(), err
+		c := NewChunk(data)
+		addr, _ = o.Serialize(c)
+		return uint64(n), addr, byte('C'), roll.Sum32(), err
 	}
 }
 
@@ -184,7 +179,9 @@ func (o *Opi) Snapshot(path string) (addr []byte, filetype byte, err error) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		return o.Save([]byte(target)), byte('l'), err
+		s := NewSymlink(target)
+		addr, err := o.Serialize(s)
+		return addr, byte('l'), err
 	case info.Mode()&os.ModeType == 0:
 		return o.Slice(path)
 	default:
@@ -248,6 +245,14 @@ func (o *Opi) Restore(name string, path string) error {
 }
 
 func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
+	// dest must exist
+	info, err := os.Lstat(dest)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return errors.New("Destination is not a directory")
+	}
 	obj, err := o.DeSerialize(addr)
 	if err != nil {
 		return err
@@ -257,7 +262,55 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 		return err
 	}
 	for _, e := range d.Entries {
-		fmt.Println(string(e.Name), string(e.Addr))
+		name := dest + "/" + string(e.Name)
+		fmt.Println(name)
+		_, err := os.Lstat(name)
+		if err == nil {
+			return errors.New("Destination already exists")
+		}
+		switch {
+		case e.FileType == byte('d'):
+			os.Mkdir(name, os.FileMode(e.Mode))
+			o.Rebuild(e.Addr, name)
+		case e.FileType == byte('l'):
+			obj, err := o.DeSerialize(e.Addr)
+			if err != nil {
+				return err
+			}
+			s, err := ReadSymlink(obj)
+			if err != nil {
+				return err
+			}
+			os.Symlink(s.Target, name)
+		}
+	}
+	return nil
+}
+
+func (o *Opi) WriteChunk(addr []byte, stream *bufio.Writer) (err error) {
+	obj, err := o.DeSerialize(addr)
+	if err != nil {
+		return err
+	}
+	c, err := ReadChunk(obj)
+	if err != nil {
+		return err
+	}
+	_, err = stream.Write(c.Data)
+	return err
+}
+
+func (o *Opi) Glue(addr []byte, stream *bufio.Writer) (err error) {
+	obj, err := o.DeSerialize(addr)
+	if err != nil {
+		return err
+	}
+	s, err := ReadSuperChunk(obj)
+	if err != nil {
+		return err
+	}
+	for _, c := range s.Children {
+		fmt.Println(c.Addr)
 	}
 	return nil
 }

@@ -13,15 +13,23 @@ type FSObject interface {
 // Chunk
 
 type Chunk struct {
-	data []byte
+	Data []byte
 }
 
 func (c *Chunk) toGoObj() interface{} {
-	return c.data
+	return c.Data
 }
 
-func NewChunk() *Chunk {
-	return &Chunk{}
+func NewChunk(data []byte) *Chunk {
+	return &Chunk{Data: data}
+}
+
+func ReadChunk(obj interface{}) (c *Chunk, err error) {
+	data, ok := obj.(string)
+	if !ok {
+		return nil, errors.New("ReadChunk: Can't parse object to a byte array")
+	}
+	return NewChunk([]byte(data)), nil
 }
 
 // SuperChunk
@@ -51,6 +59,37 @@ func (s *SuperChunk) toGoObj() interface{} {
 		obj = append(obj, [3]interface{}{c.Offset, c.MetaType, c.Addr})
 	}
 	return obj
+}
+
+func ReadSuperChunk(obj interface{}) (s *SuperChunk, err error) {
+	s = NewSuperChunk()
+	data, ok := obj.([]interface{})
+	if !ok {
+		return nil, errors.New("ReadSuperChunk: Can't parse object to a list")
+	}
+	for _, c := range data {
+		l := c.([]interface{})
+		if len(l) != 3 {
+			return nil, errors.New("ReadSuperChunk: Entry does not have 3 fields")
+		}
+		o, ok := l[0].(int64)
+		if !ok {
+			return nil, errors.New("ReadSuperChunk: Could not parse offset")
+		}
+		offset := uint64(o)
+		m, ok := l[1].(int64)
+		if !ok {
+			return nil, errors.New("ReadSuperChunk: Could not parse metatype")
+		}
+		metaType := byte(m)
+		a, ok := l[2].(string)
+		if !ok {
+			return nil, errors.New("ReadSuperChunk: Could not parse address")
+		}
+		addr := []byte(a)
+		s.AddChild(offset, metaType, addr)
+	}
+	return s, nil
 }
 
 func NewSuperChunk() *SuperChunk {
@@ -143,6 +182,26 @@ type Commit struct {
 	Host    []byte
 	Replica []byte
 	Parents [][]byte
+}
+
+type Symlink struct {
+	Target string
+}
+
+func (s *Symlink) toGoObj() interface{} {
+	return []byte(s.Target)
+}
+
+func NewSymlink(target string) *Symlink {
+	return &Symlink{Target: target}
+}
+
+func ReadSymlink(obj interface{}) (s *Symlink, err error) {
+	target, ok := obj.(string)
+	if !ok {
+		return nil, errors.New("Could not read link")
+	}
+	return NewSymlink(target), nil
 }
 
 func (c *Commit) toGoObj() interface{} {

@@ -282,6 +282,28 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 				return err
 			}
 			os.Symlink(s.Target, name)
+		case e.FileType == byte('S'):
+			f, err := os.Create(name)
+			defer f.Close()
+			if err != nil {
+				return err
+			}
+			stream := bufio.NewWriter(f)
+			err = o.Glue(e.Addr, stream)
+			if err != nil {
+				return err
+			}
+		case e.FileType == byte('C'):
+			f, err := os.Create(name)
+			defer f.Close()
+			if err != nil {
+				return err
+			}
+			stream := bufio.NewWriter(f)
+			err = o.WriteChunk(e.Addr, stream)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -310,7 +332,18 @@ func (o *Opi) Glue(addr []byte, stream *bufio.Writer) (err error) {
 		return err
 	}
 	for _, c := range s.Children {
-		fmt.Println(c.Addr)
+		switch {
+		case c.MetaType == byte('S'):
+			err := o.Glue(c.Addr, stream)
+			if err != nil {
+				return err
+			}
+		case c.MetaType == byte('C'):
+			err := o.WriteChunk(c.Addr, stream)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

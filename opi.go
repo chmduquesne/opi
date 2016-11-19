@@ -47,8 +47,9 @@ func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
 		}
 	}()
 	stream := bufio.NewReader(f)
-	n, addr, filetype, _, err := o.SliceUntil(stream, topMask)
-	fmt.Printf("%s (%v) -> %s\n", path, bytefmt.ByteSize(n), addr)
+	_, addr, filetype, _, err = o.SliceUntil(stream, topMask)
+	//n, addr, filetype, _, err := o.SliceUntil(stream, topMask)
+	//fmt.Printf("%s (%v) -> %s\n", path, bytefmt.ByteSize(n), addr)
 	if err == io.EOF {
 		err = nil
 	}
@@ -91,6 +92,7 @@ func (o *Opi) DeSerialize(addr []byte) (obj interface{}, err error) {
 // - rollsum the rolling checksum at the end of the metachunk
 // - err the error indicating whether the end of the buffer was reached
 func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
+	fmt.Printf("Begin %b\n", mask)
 	if mask > chunkMask {
 		s := NewSuperChunk()
 		offset := uint64(0)
@@ -101,8 +103,10 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 			if ((rollsum&mask == mask) && mask < topMask) || err != nil {
 				// If we have exactly 1 child, return it directly
 				if len(s.Children) == 1 {
+					fmt.Printf("End %b (%d children) eof=%v\n", mask, len(s.Children), err == io.EOF)
 					return
 				}
+				fmt.Printf("End %b (%d children) eof=%v\n", mask, len(s.Children), err == io.EOF)
 				addr, err = o.Serialize(s)
 				return offset, addr, byte('S'), rollsum, err
 			}
@@ -128,6 +132,10 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 				}
 				c := NewChunk(data)
 				addr, _ = o.Serialize(c)
+				if n == 0 {
+					fmt.Print("zero-length chunk\n")
+				}
+				fmt.Printf("End %b eof=%v\n", mask, err == io.EOF)
 				return n, addr, byte('C'), rollsum, err
 			}
 			return
@@ -145,6 +153,7 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 		}
 		c := NewChunk(data)
 		addr, _ = o.Serialize(c)
+		fmt.Printf("End %b eof=%v\n", mask, err == io.EOF)
 		return uint64(n), addr, byte('C'), roll.Sum32(), err
 	}
 }
@@ -183,6 +192,7 @@ func (o *Opi) Snapshot(path string) (addr []byte, filetype byte, err error) {
 		addr, err := o.Serialize(s)
 		return addr, byte('l'), err
 	case info.Mode()&os.ModeType == 0:
+		fmt.Print("slicing " + path + "\n")
 		return o.Slice(path)
 	default:
 		fmt.Printf("%s: file type not supported\n", path)
@@ -263,14 +273,14 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 	}
 	for _, e := range d.Entries {
 		name := dest + "/" + string(e.Name)
-		fmt.Println(name)
+		fmt.Println("Start restoring " + name)
 		_, err := os.Lstat(name)
 		if err == nil {
 			return errors.New("Destination already exists")
 		}
 		switch {
 		case e.FileType == byte('d'):
-			os.Mkdir(name, os.FileMode(e.Mode))
+			os.Mkdir(name, 0777)
 			o.Rebuild(e.Addr, name)
 		case e.FileType == byte('l'):
 			obj, err := o.DeSerialize(e.Addr)
@@ -282,29 +292,31 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 				return err
 			}
 			os.Symlink(s.Target, name)
-		case e.FileType == byte('S'):
-			f, err := os.Create(name)
-			defer f.Close()
+		case e.FileType == byte('S') || e.FileType == byte('C'):
+			f, err := os.OpenFile(name, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 			if err != nil {
 				return err
 			}
+			defer func() {
+				if closingErr := f.Close(); err == nil {
+					err = closingErr
+				}
+			}()
 			stream := bufio.NewWriter(f)
-			err = o.Glue(e.Addr, stream)
-			if err != nil {
-				return err
+			if e.FileType == byte('S') {
+				if err = o.Glue(e.Addr, stream); err != nil {
+					return err
+				}
+			} else {
+				if err = o.WriteChunk(e.Addr, stream); err != nil {
+					return err
+				}
 			}
-		case e.FileType == byte('C'):
-			f, err := os.Create(name)
-			defer f.Close()
-			if err != nil {
-				return err
-			}
-			stream := bufio.NewWriter(f)
-			err = o.WriteChunk(e.Addr, stream)
-			if err != nil {
+			if err = stream.Flush(); err != nil {
 				return err
 			}
 		}
+		os.Chmod(name, os.FileMode(e.Mode))
 	}
 	return nil
 }
@@ -318,6 +330,7 @@ func (o *Opi) WriteChunk(addr []byte, stream *bufio.Writer) (err error) {
 	if err != nil {
 		return err
 	}
+	fmt.Printf("Writing " + bytefmt.ByteSize(uint64(len(c.Data))) + " from Chunk " + string(addr) + "\n")
 	_, err = stream.Write(c.Data)
 	return err
 }

@@ -22,7 +22,7 @@ const (
 	windowSize = 128
 
 	// Dependent values
-	maxChunkSize = 1 << (chunkBits + 3)                      // see maxChunkSize.md
+	maxChunkSize = 1 << (chunkBits + 5)                      // see maxChunkSize.md
 	chunkMask    = 0xffffffff >> (32 - chunkBits)            // boundary of a chunk
 	topMask      = 0xffffffff >> ((32 - chunkBits) % fanout) // boundary of the top level
 )
@@ -47,9 +47,8 @@ func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
 		}
 	}()
 	stream := bufio.NewReader(f)
-	_, addr, filetype, _, err = o.SliceUntil(stream, topMask)
-	//n, addr, filetype, _, err := o.SliceUntil(stream, topMask)
-	//fmt.Printf("%s (%v) -> %s\n", path, bytefmt.ByteSize(n), addr)
+	n, addr, filetype, _, err := o.SliceUntil(stream, topMask)
+	fmt.Printf("%s : %s (%v)\n", addr[:10], path, bytefmt.ByteSize(n))
 	if err == io.EOF {
 		err = nil
 	}
@@ -92,7 +91,7 @@ func (o *Opi) DeSerialize(addr []byte) (obj interface{}, err error) {
 // - rollsum the rolling checksum at the end of the metachunk
 // - err the error indicating whether the end of the buffer was reached
 func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
-	fmt.Printf("Begin %b\n", mask)
+	var errSerialize error
 	if mask > chunkMask {
 		s := NewSuperChunk()
 		offset := uint64(0)
@@ -103,11 +102,12 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 			if ((rollsum&mask == mask) && mask < topMask) || err != nil {
 				// If we have exactly 1 child, return it directly
 				if len(s.Children) == 1 {
-					fmt.Printf("End %b (%d children) eof=%v\n", mask, len(s.Children), err == io.EOF)
 					return
 				}
-				fmt.Printf("End %b (%d children) eof=%v\n", mask, len(s.Children), err == io.EOF)
-				addr, err = o.Serialize(s)
+				addr, errSerialize = o.Serialize(s)
+				if err == nil {
+					err = errSerialize
+				}
 				return offset, addr, byte('S'), rollsum, err
 			}
 		}
@@ -131,19 +131,22 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 					rollsum = roll.Sum32()
 				}
 				c := NewChunk(data)
-				addr, _ = o.Serialize(c)
+				addr, errSerialize = o.Serialize(c)
+				if err == nil {
+					err = errSerialize
+				}
 				if n == 0 {
 					fmt.Print("zero-length chunk\n")
 				}
-				fmt.Printf("End %b eof=%v\n", mask, err == io.EOF)
 				return n, addr, byte('C'), rollsum, err
 			}
 			return
 		}
 		// Roll until boundary or EOF
 		roll.Write(data)
+		var b byte
 		for roll.Sum32()&mask != mask && n < maxChunkSize {
-			b, err := stream.ReadByte()
+			b, err = stream.ReadByte()
 			if err != nil {
 				break
 			}
@@ -152,8 +155,10 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 			data = append(data, b)
 		}
 		c := NewChunk(data)
-		addr, _ = o.Serialize(c)
-		fmt.Printf("End %b eof=%v\n", mask, err == io.EOF)
+		addr, errSerialize = o.Serialize(c)
+		if err == nil {
+			err = errSerialize
+		}
 		return uint64(n), addr, byte('C'), roll.Sum32(), err
 	}
 }
@@ -192,7 +197,6 @@ func (o *Opi) Snapshot(path string) (addr []byte, filetype byte, err error) {
 		addr, err := o.Serialize(s)
 		return addr, byte('l'), err
 	case info.Mode()&os.ModeType == 0:
-		fmt.Print("slicing " + path + "\n")
 		return o.Slice(path)
 	default:
 		fmt.Printf("%s: file type not supported\n", path)

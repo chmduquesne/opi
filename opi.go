@@ -297,8 +297,8 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 			}
 			os.Symlink(s.Target, name)
 		case e.FileType == byte('S') || e.FileType == byte('C'):
-			f, err := os.OpenFile(name, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
-			if err != nil {
+			var f *os.File
+			if f, err = os.OpenFile(name, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666); err != nil {
 				return err
 			}
 			defer func() {

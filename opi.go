@@ -330,7 +330,7 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 	return nil
 }
 
-func (o *Opi) WriteChunk(addr []byte, stream *bufio.Writer) (err error) {
+func (o *Opi) WriteChunk(addr []byte, stream io.Writer) (err error) {
 	obj, err := o.DeSerialize(addr)
 	if err != nil {
 		return err
@@ -344,7 +344,7 @@ func (o *Opi) WriteChunk(addr []byte, stream *bufio.Writer) (err error) {
 	return err
 }
 
-func (o *Opi) Glue(addr []byte, stream *bufio.Writer) (err error) {
+func (o *Opi) Glue(addr []byte, stream io.Writer) (err error) {
 	obj, err := o.DeSerialize(addr)
 	if err != nil {
 		return err

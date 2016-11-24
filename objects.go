@@ -8,6 +8,7 @@ import (
 
 type FSObject interface {
 	toGoObj() interface{}
+	Bytes() ([]byte, error)
 }
 
 // Chunk
@@ -18,6 +19,10 @@ type Chunk struct {
 
 func (c *Chunk) toGoObj() interface{} {
 	return c.Data
+}
+
+func (c *Chunk) Bytes() ([]byte, error) {
+	return nil, nil
 }
 
 func NewChunk(data []byte) *Chunk {
@@ -59,6 +64,10 @@ func (s *SuperChunk) toGoObj() interface{} {
 		obj = append(obj, [3]interface{}{c.Offset, c.MetaType, c.Addr})
 	}
 	return obj
+}
+
+func (s *SuperChunk) Bytes() ([]byte, error) {
+	return nil, nil
 }
 
 func ReadSuperChunk(obj interface{}) (s *SuperChunk, err error) {
@@ -131,6 +140,10 @@ func (d *Dir) toGoObj() interface{} {
 	return obj
 }
 
+func (d *Dir) Bytes() ([]byte, error) {
+	return nil, nil
+}
+
 func ReadDir(obj interface{}) (*Dir, error) {
 	d := NewDir()
 	data, ok := obj.([]interface{})
@@ -192,6 +205,9 @@ func (s *Symlink) toGoObj() interface{} {
 	return []byte(s.Target)
 }
 
+func (s *Symlink) Bytes() ([]byte, error) {
+	return nil, nil
+}
 func NewSymlink(target string) *Symlink {
 	return &Symlink{Target: target}
 }
@@ -212,6 +228,10 @@ func (c *Commit) toGoObj() interface{} {
 		c.Replica,
 		c.Parents,
 	}
+}
+
+func (c *Commit) Bytes() ([]byte, error) {
+	return nil, nil
 }
 
 func NewCommit(date time.Time, tree []byte, host []byte, replica []byte, parents [][]byte) *Commit {

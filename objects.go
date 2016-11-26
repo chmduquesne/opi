@@ -22,7 +22,7 @@ func (c *Chunk) toGoObj() interface{} {
 }
 
 func (c *Chunk) Bytes() ([]byte, error) {
-	return nil, nil
+	return c.Data, nil
 }
 
 func NewChunk(data []byte) *Chunk {
@@ -35,6 +35,10 @@ func ReadChunk(obj interface{}) (c *Chunk, err error) {
 		return nil, errors.New("ReadChunk: Can't parse object to a byte array")
 	}
 	return NewChunk([]byte(data)), nil
+}
+
+func ReadChunkBytes(data []byte) (*Chunk, error) {
+	return NewChunk(data), nil
 }
 
 // SuperChunk

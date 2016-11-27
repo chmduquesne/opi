@@ -1,14 +1,26 @@
 package opi
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"time"
+
+	bencode "github.com/jackpal/bencode-go"
 )
 
 type FSObject interface {
 	toGoObj() interface{}
 	Bytes() ([]byte, error)
+}
+
+func bencoded(obj interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	err := bencode.Marshal(&buf, obj)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // Chunk
@@ -71,7 +83,11 @@ func (s *SuperChunk) toGoObj() interface{} {
 }
 
 func (s *SuperChunk) Bytes() ([]byte, error) {
-	return nil, nil
+	var obj [][3]interface{}
+	for _, c := range s.Children {
+		obj = append(obj, [3]interface{}{c.Offset, c.MetaType, c.Addr})
+	}
+	return bencoded(obj)
 }
 
 func ReadSuperChunk(obj interface{}) (s *SuperChunk, err error) {

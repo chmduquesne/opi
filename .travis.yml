@@ -1,6 +1,5 @@
 language: go
 script:
     - go test -v ./...
-    - opi-serve &
-    - ls
-    - opi archive ${TRAVIS_BUILD_DIR} test
+      #- opi-serve &
+      #- opi archive ${TRAVIS_BUILD_DIR} test

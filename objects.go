@@ -90,6 +90,23 @@ func (s *SuperChunk) Bytes() ([]byte, error) {
 	return bencoded(obj)
 }
 
+func ReadSuperChunkBytes(data []byte) (*SuperChunk, error) {
+	var obj [][3]interface{}
+	r := bytes.NewReader(data)
+	if err := bencode.Unmarshal(r, &obj); err != nil {
+		return nil, err
+	}
+	s := NewSuperChunk()
+	for _, c := range obj {
+		s.AddChild(
+			uint64(c[0].(int64)),
+			byte(c[1].(int64)),
+			[]byte(c[2].(string)),
+		)
+	}
+	return s, nil
+}
+
 func ReadSuperChunk(obj interface{}) (s *SuperChunk, err error) {
 	s = NewSuperChunk()
 	data, ok := obj.([]interface{})
@@ -161,7 +178,36 @@ func (d *Dir) toGoObj() interface{} {
 }
 
 func (d *Dir) Bytes() ([]byte, error) {
-	return nil, nil
+	var obj [][5]interface{}
+	for _, e := range d.Entries {
+		obj = append(obj, [5]interface{}{
+			e.FileType,
+			e.Mode,
+			e.Name,
+			e.Xattr,
+			e.Addr,
+		})
+	}
+	return bencoded(obj)
+}
+
+func ReadDirBytes(data []byte) (*Dir, error) {
+	var obj [][5]interface{}
+	r := bytes.NewReader(data)
+	if err := bencode.Unmarshal(r, &obj); err != nil {
+		return nil, err
+	}
+	d := NewDir()
+	for _, e := range obj {
+		d.AddEntry(
+			byte(e[0].(int64)),
+			uint32(e[1].(int64)),
+			[]byte(e[2].(string)),
+			[]byte(e[3].(string)),
+			[]byte(e[4].(string)),
+		)
+	}
+	return d, nil
 }
 
 func ReadDir(obj interface{}) (*Dir, error) {
@@ -251,12 +297,47 @@ func (c *Commit) toGoObj() interface{} {
 }
 
 func (c *Commit) Bytes() ([]byte, error) {
-	return nil, nil
+	obj := [5]interface{}{
+		c.Date.Format(time.UnixDate),
+		c.Tree,
+		c.Host,
+		c.Replica,
+		c.Parents,
+	}
+	return bencoded(obj)
+}
+
+func ReadCommitBytes(data []byte) (*Commit, error) {
+	var obj [5]interface{}
+	r := bytes.NewReader(data)
+	if err := bencode.Unmarshal(r, &obj); err != nil {
+		return nil, err
+	}
+	d, err := time.Parse(time.UnixDate, obj[0].(string))
+	if err != nil {
+		return nil, err
+	}
+	parents := [][]byte{}
+	p, ok := obj[4].([]string)
+	if ok {
+		for _, s := range p {
+			parents = append(parents, []byte(s))
+		}
+	}
+	c := NewCommit(
+		d,
+		[]byte(obj[1].(string)),
+		[]byte(obj[2].(string)),
+		[]byte(obj[3].(string)),
+		parents,
+	)
+	return c, nil
 }
 
 func NewCommit(date time.Time, tree []byte, host []byte, replica []byte, parents [][]byte) *Commit {
+	d, _ := time.Parse(date.Format(time.UnixDate), time.UnixDate)
 	return &Commit{
-		Date:    date,
+		Date:    d,
 		Tree:    tree,
 		Host:    host,
 		Replica: replica,

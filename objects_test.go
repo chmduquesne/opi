@@ -83,4 +83,11 @@ func SuperChunksEqual(s1, s2 *SuperChunk) bool {
 }
 
 func TestSuperChunk(t *testing.T) {
+	s := NewSuperChunk()
+	s.AddChild(0, byte('C'), []byte("hello"))
+	s.AddChild(10, byte('C'), []byte("world"))
+	_, err := s.Bytes()
+	if err != nil {
+		t.Fatal("Unable to convert to bytes\n")
+	}
 }

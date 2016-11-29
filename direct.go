@@ -34,7 +34,7 @@ func (d *DB) Close() error {
 }
 
 func (d *DB) Set(key, value []byte) error {
-	go d.db.Batch(func(tx *bolt.Tx) error {
+	d.db.Batch(func(tx *bolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists(d.bucketName)
 		if err != nil {
 			return err

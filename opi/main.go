@@ -64,6 +64,7 @@ func main() {
 
 	if os.Args[1] == "archive" {
 		s := opi.NewClient()
+		//s := opi.NewDB()
 		defer s.Close()
 		c := opi.NewSimpleCodec()
 		o := opi.NewOpi(s, c)
@@ -75,6 +76,7 @@ func main() {
 
 	if os.Args[1] == "restore" {
 		s := opi.NewClient()
+		//s := opi.NewDB()
 		defer s.Close()
 		c := opi.NewSimpleCodec()
 		o := opi.NewOpi(s, c)

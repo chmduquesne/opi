@@ -27,7 +27,7 @@ func TestChunk(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		readRes, err := ReadChunkBytes(b)
+		readRes, err := ReadChunk(b)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,7 +51,7 @@ func TestChunkBlackBox(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		readRes, err := ReadChunkBytes(b)
+		readRes, err := ReadChunk(b)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -91,7 +91,7 @@ func TestSuperChunk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	readRes, err := ReadSuperChunkBytes(b)
+	readRes, err := ReadSuperChunk(b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	readRes, err := ReadDirBytes(b)
+	readRes, err := ReadDir(b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,11 +189,20 @@ func TestCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	readRes, err := ReadCommitBytes(b)
+	readRes, err := ReadCommit(b)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !CommitsEqual(c, readRes) {
+		t.Fatal("Incorrect back and forth convertion\n")
+	}
+}
+
+func TestSymlink(t *testing.T) {
+	s := NewSymlink("target")
+	b, _ := s.Bytes()
+	readRes, _ := ReadSymlink(b)
+	if s.Target != readRes.Target {
 		t.Fatal("Incorrect back and forth convertion\n")
 	}
 }

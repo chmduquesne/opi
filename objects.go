@@ -10,7 +10,6 @@ import (
 )
 
 type FSObject interface {
-	toGoObj() interface{}
 	Bytes() ([]byte, error)
 }
 
@@ -23,14 +22,15 @@ func bencoded(obj interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func DecodeError(field string, object string) error {
+	msg := fmt.Sprintf("Could not decode field %s from object %s", field, object)
+	return errors.New(msg)
+}
+
 // Chunk
 
 type Chunk struct {
 	Data []byte
-}
-
-func (c *Chunk) toGoObj() interface{} {
-	return c.Data
 }
 
 func (c *Chunk) Bytes() ([]byte, error) {
@@ -41,15 +41,7 @@ func NewChunk(data []byte) *Chunk {
 	return &Chunk{Data: data}
 }
 
-func ReadChunk(obj interface{}) (c *Chunk, err error) {
-	data, ok := obj.(string)
-	if !ok {
-		return nil, errors.New("ReadChunk: Can't parse object to a byte array")
-	}
-	return NewChunk([]byte(data)), nil
-}
-
-func ReadChunkBytes(data []byte) (*Chunk, error) {
+func ReadChunk(data []byte) (*Chunk, error) {
 	return NewChunk(data), nil
 }
 
@@ -74,14 +66,6 @@ func (s *SuperChunk) AddChild(offset uint64, metaType byte, addr []byte) {
 	s.Children = append(s.Children, m)
 }
 
-func (s *SuperChunk) toGoObj() interface{} {
-	var obj [][3]interface{}
-	for _, c := range s.Children {
-		obj = append(obj, [3]interface{}{c.Offset, c.MetaType, c.Addr})
-	}
-	return obj
-}
-
 func (s *SuperChunk) Bytes() ([]byte, error) {
 	var obj [][3]interface{}
 	for _, c := range s.Children {
@@ -90,7 +74,7 @@ func (s *SuperChunk) Bytes() ([]byte, error) {
 	return bencoded(obj)
 }
 
-func ReadSuperChunkBytes(data []byte) (*SuperChunk, error) {
+func ReadSuperChunk(data []byte) (*SuperChunk, error) {
 	var obj [][3]interface{}
 	r := bytes.NewReader(data)
 	if err := bencode.Unmarshal(r, &obj); err != nil {
@@ -98,42 +82,23 @@ func ReadSuperChunkBytes(data []byte) (*SuperChunk, error) {
 	}
 	s := NewSuperChunk()
 	for _, c := range obj {
+		offset, ok := c[0].(int64)
+		if !ok {
+			return nil, DecodeError("Chunk", "Offset")
+		}
+		metaType, ok := c[1].(int64)
+		if !ok {
+			return nil, DecodeError("Chunk", "MetaType")
+		}
+		addr, ok := c[2].(string)
+		if !ok {
+			return nil, DecodeError("Chunk", "Addr")
+		}
 		s.AddChild(
-			uint64(c[0].(int64)),
-			byte(c[1].(int64)),
-			[]byte(c[2].(string)),
+			uint64(offset),
+			byte(metaType),
+			[]byte(addr),
 		)
-	}
-	return s, nil
-}
-
-func ReadSuperChunk(obj interface{}) (s *SuperChunk, err error) {
-	s = NewSuperChunk()
-	data, ok := obj.([]interface{})
-	if !ok {
-		return nil, errors.New("ReadSuperChunk: Can't parse object to a list")
-	}
-	for _, c := range data {
-		l := c.([]interface{})
-		if len(l) != 3 {
-			return nil, errors.New("ReadSuperChunk: Entry does not have 3 fields")
-		}
-		o, ok := l[0].(int64)
-		if !ok {
-			return nil, errors.New("ReadSuperChunk: Could not parse offset")
-		}
-		offset := uint64(o)
-		m, ok := l[1].(int64)
-		if !ok {
-			return nil, errors.New("ReadSuperChunk: Could not parse metatype")
-		}
-		metaType := byte(m)
-		a, ok := l[2].(string)
-		if !ok {
-			return nil, errors.New("ReadSuperChunk: Could not parse address")
-		}
-		addr := []byte(a)
-		s.AddChild(offset, metaType, addr)
 	}
 	return s, nil
 }
@@ -142,9 +107,13 @@ func NewSuperChunk() *SuperChunk {
 	return &SuperChunk{}
 }
 
+// Xattr
+
 type Xattr struct {
 	attributes map[string]string
 }
+
+// Dir
 
 type DirEntry struct {
 	FileType byte
@@ -169,14 +138,6 @@ type Dir struct {
 	Entries []DirEntry
 }
 
-func (d *Dir) toGoObj() interface{} {
-	var obj [][5]interface{}
-	for _, e := range d.Entries {
-		obj = append(obj, [5]interface{}{e.FileType, e.Mode, e.Name, e.Xattr, e.Addr})
-	}
-	return obj
-}
-
 func (d *Dir) Bytes() ([]byte, error) {
 	var obj [][5]interface{}
 	for _, e := range d.Entries {
@@ -191,7 +152,7 @@ func (d *Dir) Bytes() ([]byte, error) {
 	return bencoded(obj)
 }
 
-func ReadDirBytes(data []byte) (*Dir, error) {
+func ReadDir(data []byte) (*Dir, error) {
 	var obj [][5]interface{}
 	r := bytes.NewReader(data)
 	if err := bencode.Unmarshal(r, &obj); err != nil {
@@ -199,54 +160,33 @@ func ReadDirBytes(data []byte) (*Dir, error) {
 	}
 	d := NewDir()
 	for _, e := range obj {
+		fileType, ok := e[0].(int64)
+		if !ok {
+			return nil, DecodeError("FileType", "Dir")
+		}
+		mode, ok := e[1].(int64)
+		if !ok {
+			return nil, DecodeError("Mode", "Dir")
+		}
+		name, ok := e[2].(string)
+		if !ok {
+			return nil, DecodeError("Name", "Dir")
+		}
+		xattr, ok := e[3].(string)
+		if !ok {
+			return nil, DecodeError("Xattr", "Dir")
+		}
+		addr, ok := e[4].(string)
+		if !ok {
+			return nil, DecodeError("Addr", "Dir")
+		}
 		d.AddEntry(
-			byte(e[0].(int64)),
-			uint32(e[1].(int64)),
-			[]byte(e[2].(string)),
-			[]byte(e[3].(string)),
-			[]byte(e[4].(string)),
+			byte(fileType),
+			uint32(mode),
+			[]byte(name),
+			[]byte(xattr),
+			[]byte(addr),
 		)
-	}
-	return d, nil
-}
-
-func ReadDir(obj interface{}) (*Dir, error) {
-	d := NewDir()
-	data, ok := obj.([]interface{})
-	if !ok {
-		return nil, errors.New("ReadDir: Can't parse dir object to a list")
-	}
-	for _, e := range data {
-		attributes := e.([]interface{})
-		if len(attributes) != 5 {
-			return nil, errors.New("ReadDir: Entry does not have 5 fields")
-		}
-		ft, ok := attributes[0].(int64)
-		if !ok {
-			return nil, errors.New("ReadDir: Could not parse file type")
-		}
-		fileType := byte(ft)
-		m, ok := attributes[1].(int64)
-		if !ok {
-			return nil, errors.New("ReadDir: Could not parse mode")
-		}
-		mode := uint32(m)
-		n, ok := attributes[2].(string)
-		if !ok {
-			return nil, errors.New("ReadDir: Could not parse name")
-		}
-		name := []byte(n)
-		x, ok := attributes[3].(string)
-		if !ok {
-			return nil, errors.New("ReadDir: Could not parse xattr")
-		}
-		xattr := []byte(x)
-		a, ok := attributes[4].(string)
-		if !ok {
-			return nil, errors.New("ReadDir: Could not parse address")
-		}
-		addr := []byte(a)
-		d.AddEntry(fileType, mode, name, xattr, addr)
 	}
 	return d, nil
 }
@@ -255,45 +195,14 @@ func NewDir() *Dir {
 	return &Dir{}
 }
 
+// Commit
+
 type Commit struct {
 	Date    time.Time
 	Tree    []byte
 	Host    []byte
 	Replica []byte
 	Parents [][]byte
-}
-
-type Symlink struct {
-	Target string
-}
-
-func (s *Symlink) toGoObj() interface{} {
-	return []byte(s.Target)
-}
-
-func (s *Symlink) Bytes() ([]byte, error) {
-	return nil, nil
-}
-func NewSymlink(target string) *Symlink {
-	return &Symlink{Target: target}
-}
-
-func ReadSymlink(obj interface{}) (s *Symlink, err error) {
-	target, ok := obj.(string)
-	if !ok {
-		return nil, errors.New("Could not read link")
-	}
-	return NewSymlink(target), nil
-}
-
-func (c *Commit) toGoObj() interface{} {
-	return [5]interface{}{
-		c.Date.Format(time.UnixDate),
-		c.Tree,
-		c.Host,
-		c.Replica,
-		c.Parents,
-	}
 }
 
 func (c *Commit) Bytes() ([]byte, error) {
@@ -307,15 +216,31 @@ func (c *Commit) Bytes() ([]byte, error) {
 	return bencoded(obj)
 }
 
-func ReadCommitBytes(data []byte) (*Commit, error) {
+func ReadCommit(data []byte) (*Commit, error) {
 	var obj [5]interface{}
 	r := bytes.NewReader(data)
 	if err := bencode.Unmarshal(r, &obj); err != nil {
 		return nil, err
 	}
-	d, err := time.Parse(time.UnixDate, obj[0].(string))
+	fmtdate, ok := obj[0].(string)
+	if !ok {
+		return nil, DecodeError("Date", "Commit")
+	}
+	d, err := time.Parse(time.UnixDate, fmtdate)
 	if err != nil {
 		return nil, err
+	}
+	tree, ok := obj[1].(string)
+	if !ok {
+		return nil, DecodeError("Tree", "Commit")
+	}
+	host, ok := obj[2].(string)
+	if !ok {
+		return nil, DecodeError("Host", "Commit")
+	}
+	replica, ok := obj[3].(string)
+	if !ok {
+		return nil, DecodeError("Replica", "Commit")
 	}
 	parents := [][]byte{}
 	p, ok := obj[4].([]string)
@@ -326,12 +251,16 @@ func ReadCommitBytes(data []byte) (*Commit, error) {
 	}
 	c := NewCommit(
 		d,
-		[]byte(obj[1].(string)),
-		[]byte(obj[2].(string)),
-		[]byte(obj[3].(string)),
+		[]byte(tree),
+		[]byte(host),
+		[]byte(replica),
 		parents,
 	)
 	return c, nil
+}
+
+func (c *Commit) AddParent(addr []byte) {
+	c.Parents = append(c.Parents, addr)
 }
 
 func NewCommit(date time.Time, tree []byte, host []byte, replica []byte, parents [][]byte) *Commit {
@@ -345,46 +274,20 @@ func NewCommit(date time.Time, tree []byte, host []byte, replica []byte, parents
 	}
 }
 
-func ReadCommit(obj interface{}) (*Commit, error) {
-	data, ok := obj.([]interface{})
-	if !ok {
-		fmt.Print(obj)
-		return nil, errors.New("Could not parse commit")
-	}
-	if len(data) != 5 {
-		return nil, errors.New("Commit does not have the right number of fields")
-	}
-	date, ok := data[0].(string)
-	if !ok {
-		return nil, errors.New("Could not get date as string")
-	}
-	commitDate, err := time.Parse(time.UnixDate, date)
-	if err != nil {
-		return nil, err
-	}
-	tree, ok := data[1].(string)
-	if !ok {
-		return nil, errors.New("Could not get tree as string")
-	}
-	host, ok := data[2].(string)
-	if !ok {
-		return nil, errors.New("Could not get host as string")
-	}
-	c := &Commit{
-		Date:    commitDate,
-		Tree:    []byte(tree),
-		Host:    []byte(host),
-		Replica: nil,
-		Parents: nil,
-	}
+// Symlink
 
-	return c, nil
+type Symlink struct {
+	Target string
 }
 
-func ReadAddr(obj interface{}) ([]byte, error) {
-	addr_str, ok := obj.(string)
-	if !ok {
-		return nil, errors.New("Could not read address")
-	}
-	return []byte(addr_str), nil
+func (s *Symlink) Bytes() ([]byte, error) {
+	return []byte(s.Target), nil
+}
+func NewSymlink(target string) *Symlink {
+	return &Symlink{Target: target}
+}
+
+func ReadSymlink(data []byte) (s *Symlink, err error) {
+	target := string(data)
+	return NewSymlink(target), nil
 }

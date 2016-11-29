@@ -37,59 +37,57 @@ func NewOpi(s Storage, c Codec) Timeline {
 }
 
 func (o *Opi) Serialize(f FSObject) ([]byte, error) {
-	obj := f.toGoObj()
-	value, err := o.Encode(obj)
+	value, err := f.Bytes()
 	if err != nil {
 		return nil, err
 	}
 	addr := []byte(fmt.Sprintf("%x", sha512.Sum512(value)))
-	//fmt.Println(string(addr))
-	err = o.Set(addr, value)
+	encoded, err := o.Encode(value)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		if err := o.Set(addr, encoded); err != nil {
+			panic(err)
+		}
+	}()
 	if err != nil {
 		return nil, err
 	}
 	return addr, nil
 }
 
-func (o *Opi) DeSerialize(addr []byte) (obj interface{}, err error) {
-	data, err := o.Get(addr)
+func (o *Opi) DeSerialize(addr []byte) (value []byte, err error) {
+	encoded, err := o.Get(addr)
 	if err != nil {
 		return nil, err
 	}
-	return o.Decode(data)
+	value, err = o.Decode(encoded)
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
 func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
-	f, err := os.Open(path)
-	if err != nil {
-		log.Fatal(err)
+	var f *os.File
+	if f, err = os.Open(path); err != nil {
+		return
 	}
 	defer func() {
-		if err := f.Close(); err != nil {
-			log.Fatal(err)
+		if errClose := f.Close(); err == nil {
+			err = errClose
 		}
 	}()
 	stream := bufio.NewReader(f)
 	n, addr, filetype, _, err := o.SliceUntil(stream, topMask)
-	fmt.Printf("%s : %s (%v)\n", addr[:10], path, bytefmt.ByteSize(n))
+	fmt.Printf("%s (%v)\n", path, bytefmt.ByteSize(n))
 	if err == io.EOF {
 		err = nil
 	}
 	return addr, filetype, err
 }
 
-// Read the buffer until one of these conditions is met:
-// - The rolling checksum matches the mask
-// - The end of the buffer is reached
-// Exception: when the input mask is topMask, the read does not stop
-// until the end of the buffer
-//
-// Store the resulting intermediate metachunks, and return
-// - n the number of bytes consumed from the buffer
-// - addr the address of the stored metachunk
-// - metatype the type of the stored metachunk ('C' or 'S')
-// - rollsum the rolling checksum at the end of the metachunk
-// - err the error indicating whether the end of the buffer was reached
 func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
 	var errSerialize error
 	if mask > chunkMask {
@@ -111,9 +109,9 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 				return offset, addr, byte('S'), rollsum, err
 			}
 		}
-	} else {
-		return o.SliceChunk(stream)
 	}
+	// else
+	return o.SliceChunk(stream)
 }
 
 func (o *Opi) SliceChunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
@@ -125,12 +123,12 @@ func (o *Opi) SliceChunk(stream *bufio.Reader) (n uint64, addr []byte, metatype 
 	// read the initial window
 	sz := 0
 	sz, err = stream.Read(data)
+	data = data[:sz]
 	n = uint64(sz)
 
 	// EOF during initial window
 	if err != nil {
 		if err == io.EOF {
-			data = data[:n]
 			rollsum := uint32(0)
 			if n > 0 {
 				roll.Write(data)
@@ -226,11 +224,7 @@ func (o *Opi) Archive(path string, name string) error {
 	if err != nil {
 		return err
 	}
-	value, err := o.Encode(addr)
-	if err != nil {
-		return err
-	}
-	err = o.Set([]byte(name), value)
+	err = o.Set([]byte(name), addr)
 	if err != nil {
 		return err
 	}
@@ -239,22 +233,18 @@ func (o *Opi) Archive(path string, name string) error {
 
 func (o *Opi) Restore(name string, path string) error {
 	// address of the top commit
-	obj, err := o.DeSerialize([]byte(name))
-	if err != nil {
-		return err
-	}
-	addr, err := ReadAddr(obj)
+	addr, err := o.Get([]byte(name))
 	if err != nil {
 		return err
 	}
 	fmt.Println("Top commit address: ", string(addr))
 
 	// top commit
-	obj, err = o.DeSerialize(addr)
+	b, err := o.DeSerialize(addr)
 	if err != nil {
 		return err
 	}
-	c, err := ReadCommit(obj)
+	c, err := ReadCommit(b)
 	if err != nil {
 		return err
 	}
@@ -272,11 +262,11 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 	if !info.IsDir() {
 		return errors.New("Destination is not a directory")
 	}
-	obj, err := o.DeSerialize(addr)
+	b, err := o.DeSerialize(addr)
 	if err != nil {
 		return err
 	}
-	d, err := ReadDir(obj)
+	d, err := ReadDir(b)
 	if err != nil {
 		return err
 	}
@@ -292,11 +282,11 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 			os.Mkdir(name, 0777)
 			o.Rebuild(e.Addr, name)
 		case e.FileType == byte('l'):
-			obj, err := o.DeSerialize(e.Addr)
+			b, err := o.DeSerialize(e.Addr)
 			if err != nil {
 				return err
 			}
-			s, err := ReadSymlink(obj)
+			s, err := ReadSymlink(b)
 			if err != nil {
 				return err
 			}
@@ -331,11 +321,11 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 }
 
 func (o *Opi) WriteChunk(addr []byte, stream io.Writer) (err error) {
-	obj, err := o.DeSerialize(addr)
+	b, err := o.DeSerialize(addr)
 	if err != nil {
 		return err
 	}
-	c, err := ReadChunk(obj)
+	c, err := ReadChunk(b)
 	if err != nil {
 		return err
 	}
@@ -345,11 +335,11 @@ func (o *Opi) WriteChunk(addr []byte, stream io.Writer) (err error) {
 }
 
 func (o *Opi) Glue(addr []byte, stream io.Writer) (err error) {
-	obj, err := o.DeSerialize(addr)
+	b, err := o.DeSerialize(addr)
 	if err != nil {
 		return err
 	}
-	s, err := ReadSuperChunk(obj)
+	s, err := ReadSuperChunk(b)
 	if err != nil {
 		return err
 	}

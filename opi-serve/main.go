@@ -6,11 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
 	"os/user"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/boltdb/bolt"
@@ -20,7 +16,6 @@ import (
 type Storage struct {
 	db         *bolt.DB
 	bucketName []byte
-	wg         sync.WaitGroup
 }
 
 func NewStorage() *Storage {
@@ -38,14 +33,11 @@ func NewStorage() *Storage {
 }
 
 func (s *Storage) Close() error {
-	s.wg.Wait()
 	return s.db.Close()
 }
 
 func (s *Storage) Set(key, value []byte) error {
-	s.wg.Add(1)
-	go s.db.Batch(func(tx *bolt.Tx) error {
-		defer s.wg.Done()
+	return s.db.Batch(func(tx *bolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists(s.bucketName)
 		if err != nil {
 			return err
@@ -56,7 +48,6 @@ func (s *Storage) Set(key, value []byte) error {
 		}
 		return nil
 	})
-	return nil
 }
 
 func (s *Storage) Get(key []byte) (value []byte, err error) {
@@ -98,14 +89,6 @@ func main() {
 			log.Printf("%s: method not supported", r.Method)
 		}
 	}
-
-	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-		<-c
-		s.Close()
-		os.Exit(1)
-	}()
 
 	http.HandleFunc("/", handler)
 

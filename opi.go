@@ -19,7 +19,7 @@ const (
 	// splitting algorithm
 	fanout     = 4
 	chunkBits  = 13
-	windowSize = 128
+	windowSize = 64
 
 	// Dependent values
 	maxChunkSize = 1 << (chunkBits + 5)                      // see maxChunkSize.md
@@ -139,9 +139,6 @@ func (o *Opi) SliceChunk(stream *bufio.Reader) (n uint64, addr []byte, metatype 
 			if err == nil {
 				err = errSerialize
 			}
-			if n == 0 {
-				fmt.Print("zero-length chunk\n")
-			}
 			return n, addr, byte('C'), rollsum, err
 		}
 		return
@@ -245,8 +242,6 @@ func (o *Opi) Restore(name string, path string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Top commit address: ", string(addr))
-
 	// top commit
 	b, err := o.DeSerialize(addr)
 	if err != nil {
@@ -256,8 +251,6 @@ func (o *Opi) Restore(name string, path string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("commits point to ", string(c.Tree))
-
 	return o.Rebuild(c.Tree, path)
 }
 
@@ -280,7 +273,6 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 	}
 	for _, e := range d.Entries {
 		name := dest + "/" + string(e.Name)
-		fmt.Println("Start restoring " + name)
 		_, err := os.Lstat(name)
 		if err == nil {
 			return errors.New("Destination already exists")
@@ -324,6 +316,7 @@ func (o *Opi) Rebuild(addr []byte, dest string) (err error) {
 			}
 		}
 		os.Chmod(name, os.FileMode(e.Mode))
+		fmt.Println(name)
 	}
 	return nil
 }
@@ -337,7 +330,6 @@ func (o *Opi) WriteChunk(addr []byte, stream io.Writer) (err error) {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Writing " + bytefmt.ByteSize(uint64(len(c.Data))) + " from Chunk " + string(addr) + "\n")
 	_, err = stream.Write(c.Data)
 	return err
 }

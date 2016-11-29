@@ -224,7 +224,11 @@ func (o *Opi) Archive(path string, name string) error {
 	if err != nil {
 		return err
 	}
-	err = o.Set([]byte(name), addr)
+	encodedAddr, err := o.Encode(addr)
+	if err != nil {
+		return err
+	}
+	err = o.Set([]byte(name), encodedAddr)
 	if err != nil {
 		return err
 	}
@@ -233,7 +237,11 @@ func (o *Opi) Archive(path string, name string) error {
 
 func (o *Opi) Restore(name string, path string) error {
 	// address of the top commit
-	addr, err := o.Get([]byte(name))
+	encodedAddr, err := o.Get([]byte(name))
+	if err != nil {
+		return err
+	}
+	addr, err := o.Decode(encodedAddr)
 	if err != nil {
 		return err
 	}

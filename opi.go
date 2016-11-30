@@ -19,8 +19,8 @@ const (
 	// splitting algorithm
 	fanout     = 4
 	chunkBits  = 13
-	windowSize = 256
-	maxWriters = 1000
+	windowSize = 512
+	maxWriters = 100
 
 	// Dependent values
 	maxChunkSize = 1 << (chunkBits + 5)                      // see maxChunkSize.md
@@ -45,15 +45,15 @@ func NewOpi(s Storage, c Codec) Timeline {
 // Wrap Storage.Set to do things concurrently. If an error occurs, a panic
 // is generated and must be recovered by the caller in order to exit
 // cleanly.
-func (o *Opi) Set(key []byte, value []byte) {
-	o.writers <- true
-	go func() {
-		defer func() { <-o.writers }()
-		if err := o.Storage.Set(key, value); err != nil {
-			panic(err)
-		}
-	}()
-}
+//func (o *Opi) Set(key []byte, value []byte) {
+//	o.writers <- true
+//	go func() {
+//		defer func() { <-o.writers }()
+//		if err := o.Storage.Set(key, value); err != nil {
+//			panic(err)
+//		}
+//	}()
+//}
 
 func (o *Opi) Serialize(f FSObject) ([]byte, error) {
 	value, err := f.Bytes()
@@ -101,7 +101,7 @@ func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
 }
 
 func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
-	var errSerialize error
+	var errWrite error
 	if mask > chunkMask {
 		s := NewSuperChunk()
 		offset := uint64(0)
@@ -114,9 +114,8 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 				if len(s.Children) == 1 {
 					return
 				}
-				addr, errSerialize = o.Serialize(s)
-				if err == nil {
-					err = errSerialize
+				if addr, errWrite = o.Serialize(s); errWrite != nil {
+					err = errWrite
 				}
 				return offset, addr, byte('S'), rollsum, err
 			}
@@ -124,42 +123,41 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 	}
 	// else
 	n, addr, metatype, rollsum, err = o.Chunk(stream)
-	fmt.Println(bytefmt.ByteSize(n))
 	return
 }
 
 func (o *Opi) Chunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
-	var errSerialize error
+	var errWrite error
 
-	data := make([]byte, windowSize, maxChunkSize)
+	data := make([]byte, 0, maxChunkSize)
 	roll := adler32.New()
 
 	// read the initial window
-	sz := 0
-	sz, err = stream.Read(data)
-	data = data[:sz]
-	n = uint64(sz)
+	var b byte
+	for i := 0; i < windowSize; i++ {
+		b, err = stream.ReadByte()
+		if err != nil {
+			break
+		}
+		data = append(data, b)
+	}
+	if n = uint64(len(data)); n > 0 {
+		roll.Write(data)
+	}
 
-	// EOF during initial window
+	// Error during initial window
 	if err != nil {
 		if err == io.EOF {
-			rollsum := uint32(0)
-			if n > 0 {
-				roll.Write(data)
-				rollsum = roll.Sum32()
-			}
 			c := NewChunk(data)
-			addr, errSerialize = o.Serialize(c)
-			if err == nil {
-				err = errSerialize
+			if addr, errWrite = o.Serialize(c); errWrite != nil {
+				err = errWrite
 			}
-			return n, addr, byte('C'), rollsum, err
+			return n, addr, byte('C'), roll.Sum32(), err
 		}
 		return
 	}
+
 	// Roll until boundary or EOF
-	roll.Write(data)
-	var b byte
 	for roll.Sum32()&chunkMask != chunkMask && n < maxChunkSize {
 		b, err = stream.ReadByte()
 		if err != nil {
@@ -170,9 +168,8 @@ func (o *Opi) Chunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte,
 		data = append(data, b)
 	}
 	c := NewChunk(data)
-	addr, errSerialize = o.Serialize(c)
-	if err == nil {
-		err = errSerialize
+	if addr, errWrite = o.Serialize(c); errWrite != nil {
+		err = errWrite
 	}
 	return uint64(n), addr, byte('C'), roll.Sum32(), err
 }

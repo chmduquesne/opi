@@ -37,7 +37,7 @@ func (s *Storage) Close() error {
 }
 
 func (s *Storage) Set(key, value []byte) error {
-	return s.db.Batch(func(tx *bolt.Tx) error {
+	go s.db.Batch(func(tx *bolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists(s.bucketName)
 		if err != nil {
 			return err
@@ -48,6 +48,7 @@ func (s *Storage) Set(key, value []byte) error {
 		}
 		return nil
 	})
+	return nil
 }
 
 func (s *Storage) Get(key []byte) (value []byte, err error) {

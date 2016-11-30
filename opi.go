@@ -19,7 +19,8 @@ const (
 	// splitting algorithm
 	fanout     = 4
 	chunkBits  = 13
-	windowSize = 64
+	windowSize = 256
+	maxWriters = 1000
 
 	// Dependent values
 	maxChunkSize = 1 << (chunkBits + 5)                      // see maxChunkSize.md
@@ -30,10 +31,28 @@ const (
 type Opi struct {
 	Storage
 	Codec
+	writers chan bool
 }
 
 func NewOpi(s Storage, c Codec) Timeline {
-	return &Opi{Storage: s, Codec: c}
+	return &Opi{
+		Storage: s,
+		Codec:   c,
+		writers: make(chan bool, maxWriters),
+	}
+}
+
+// Wrap Storage.Set to do things concurrently. If an error occurs, a panic
+// is generated and must be recovered by the caller in order to exit
+// cleanly.
+func (o *Opi) Set(key []byte, value []byte) {
+	o.writers <- true
+	go func() {
+		defer func() { <-o.writers }()
+		if err := o.Storage.Set(key, value); err != nil {
+			panic(err)
+		}
+	}()
 }
 
 func (o *Opi) Serialize(f FSObject) ([]byte, error) {
@@ -46,14 +65,7 @@ func (o *Opi) Serialize(f FSObject) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	go func() {
-		if err := o.Set(addr, encoded); err != nil {
-			panic(err)
-		}
-	}()
-	if err != nil {
-		return nil, err
-	}
+	o.Set(addr, encoded)
 	return addr, nil
 }
 
@@ -111,10 +123,12 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 		}
 	}
 	// else
-	return o.SliceChunk(stream)
+	n, addr, metatype, rollsum, err = o.Chunk(stream)
+	fmt.Println(bytefmt.ByteSize(n))
+	return
 }
 
-func (o *Opi) SliceChunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
+func (o *Opi) Chunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
 	var errSerialize error
 
 	data := make([]byte, windowSize, maxChunkSize)
@@ -205,6 +219,11 @@ func (o *Opi) Snapshot(path string) (addr []byte, filetype byte, err error) {
 }
 
 func (o *Opi) Archive(path string, name string) error {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Fatal(err)
+		}
+	}()
 	addr, filetype, err := o.Snapshot(path)
 	if filetype != byte('d') {
 		return errors.New("Can only archive a directory")
@@ -225,7 +244,7 @@ func (o *Opi) Archive(path string, name string) error {
 	if err != nil {
 		return err
 	}
-	err = o.Set([]byte(name), encodedAddr)
+	o.Set([]byte(name), encodedAddr)
 	if err != nil {
 		return err
 	}

@@ -45,6 +45,9 @@ func NewOpi(s Storage, c Codec) Timeline {
 // Wrap Storage.Set to do things concurrently. If an error occurs, a panic
 // is generated and must be recovered by the caller in order to exit
 // cleanly.
+func (o *Opi) Set(key []byte, value []byte) {
+}
+
 //func (o *Opi) Set(key []byte, value []byte) {
 //	o.writers <- true
 //	go func() {
@@ -91,7 +94,7 @@ func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
 			err = errClose
 		}
 	}()
-	stream := bufio.NewReader(f)
+	stream := bufio.NewReaderSize(f, 8192)
 	n, addr, filetype, _, err := o.SliceUntil(stream, topMask)
 	fmt.Printf("%s (%v)\n", path, bytefmt.ByteSize(n))
 	if err == io.EOF {

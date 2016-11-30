@@ -11,8 +11,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/chmduquesne/rollinghash/adler32"
 	"github.com/cloudfoundry/bytefmt"
+	adler32 "gopkg.in/chmduquesne/rollinghash.v1/adler32"
 )
 
 const (

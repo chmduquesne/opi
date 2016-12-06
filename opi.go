@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/cloudfoundry/bytefmt"
-	adler32 "gopkg.in/chmduquesne/rollinghash.v1/adler32"
+	"gopkg.in/chmduquesne/rollinghash.v1/rabinkarp32"
 )
 
 const (
@@ -133,7 +133,7 @@ func (o *Opi) Chunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte,
 	var errWrite error
 
 	data := make([]byte, 0, maxChunkSize)
-	roll := adler32.New()
+	roll := rabinkarp32.New(3)
 
 	// read the initial window
 	var b byte

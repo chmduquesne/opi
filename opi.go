@@ -133,7 +133,7 @@ func (o *Opi) Chunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte,
 	var errWrite error
 
 	data := make([]byte, 0, maxChunkSize)
-	roll := rabinkarp32.New(3)
+	roll := rabinkarp32.New()
 
 	// read the initial window
 	var b byte

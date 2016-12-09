@@ -2,12 +2,16 @@ package opi
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"net/http"
 )
 
+func init() {
+	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = maxWriters
+}
+
 type Client struct {
-	http.Client
 	Host string
 }
 
@@ -18,7 +22,7 @@ func NewClient() Storage {
 }
 
 func (c *Client) Get(key []byte) (value []byte, err error) {
-	resp, err := c.Client.Get(c.Host + string(key))
+	resp, err := http.Get(c.Host + string(key))
 	if err != nil {
 		return nil, err
 	}
@@ -28,12 +32,13 @@ func (c *Client) Get(key []byte) (value []byte, err error) {
 }
 
 func (c *Client) Set(key, value []byte) (err error) {
-	resp, err := c.Client.Post(c.Host+string(key),
+	resp, err := http.Post(c.Host+string(key),
 		"application/x-www-form-urlencoded",
 		bytes.NewReader(value))
 	if err != nil {
 		return err
 	}
+	_, err = io.Copy(ioutil.Discard, resp.Body)
 	defer resp.Body.Close()
 	return
 }

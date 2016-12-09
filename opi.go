@@ -95,8 +95,10 @@ func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
 		}
 	}()
 	stream := bufio.NewReaderSize(f, 8192)
+	t := time.Now()
 	n, addr, filetype, _, err := o.SliceUntil(stream, topMask)
-	fmt.Printf("%s (%v)\n", path, bytefmt.ByteSize(n))
+	d := time.Since(t)
+	fmt.Printf("%s %s (%s/s)\n", path, bytefmt.ByteSize(n), bytefmt.ByteSize(uint64(float64(n)/d.Seconds())))
 	if err == io.EOF {
 		err = nil
 	}

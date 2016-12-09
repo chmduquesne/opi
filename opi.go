@@ -11,8 +11,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/chmduquesne/rollinghash/rabinkarp32"
 	"github.com/cloudfoundry/bytefmt"
-	"gopkg.in/chmduquesne/rollinghash.v2/rabinkarp32"
 )
 
 const (

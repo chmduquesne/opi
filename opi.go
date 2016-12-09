@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/cloudfoundry/bytefmt"
-	"gopkg.in/chmduquesne/rollinghash.v1/rabinkarp32"
+	"gopkg.in/chmduquesne/rollinghash.v2/rabinkarp32"
 )
 
 const (

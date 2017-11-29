@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/chmduquesne/rollinghash/rabinkarp32"
+	"github.com/chmduquesne/rollinghash/buzhash64"
 	"github.com/cloudfoundry/bytefmt"
 )
 
@@ -19,14 +19,16 @@ const (
 	// splitting algorithm
 	fanout     = 4
 	chunkBits  = 13
-	windowSize = 512
+	windowSize = 64
 	maxWriters = 100
 
 	// Dependent values
-	maxChunkSize = 1 << (chunkBits + 5)                      // see maxChunkSize.md
-	chunkMask    = 0xffffffff >> (32 - chunkBits)            // boundary of a chunk
-	topMask      = 0xffffffff >> ((32 - chunkBits) % fanout) // boundary of the top level
+	maxChunkSize = 1 << (chunkBits + 5)                       // see maxChunkSize.md
+	chunkMask    = ^rollsum(0) >> (32 - chunkBits)            // boundary of a chunk
+	topMask      = ^rollsum(0) >> ((32 - chunkBits) % fanout) // boundary of the top level
 )
+
+type rollsum uint64
 
 type Opi struct {
 	Storage
@@ -105,16 +107,16 @@ func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
 	return addr, filetype, err
 }
 
-func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
+func (o *Opi) SliceUntil(stream *bufio.Reader, mask rollsum) (n uint64, addr []byte, metatype byte, r rollsum, err error) {
 	var errWrite error
 	if mask > chunkMask {
 		s := NewSuperChunk()
 		offset := uint64(0)
 		for {
-			n, addr, metatype, rollsum, err = o.SliceUntil(stream, mask>>fanout)
+			n, addr, metatype, r, err = o.SliceUntil(stream, mask>>fanout)
 			s.AddChild(offset, metatype, addr)
 			offset += n
-			if ((rollsum&mask == mask) && mask < topMask) || err != nil {
+			if ((r&mask == mask) && mask < topMask) || err != nil {
 				// If we have exactly 1 child, return it directly
 				if len(s.Children) == 1 {
 					return
@@ -122,20 +124,20 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask uint32) (n uint64, addr []by
 				if addr, errWrite = o.Serialize(s); errWrite != nil {
 					err = errWrite
 				}
-				return offset, addr, byte('S'), rollsum, err
+				return offset, addr, byte('S'), r, err
 			}
 		}
 	}
 	// else
-	n, addr, metatype, rollsum, err = o.Chunk(stream)
+	n, addr, metatype, r, err = o.Chunk(stream)
 	return
 }
 
-func (o *Opi) Chunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte, rollsum uint32, err error) {
+func (o *Opi) Chunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte, r rollsum, err error) {
 	var errWrite error
 
 	data := make([]byte, 0, maxChunkSize)
-	roll := rabinkarp32.New()
+	roll := buzhash64.New()
 
 	// read the initial window
 	var b byte
@@ -157,13 +159,13 @@ func (o *Opi) Chunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte,
 			if addr, errWrite = o.Serialize(c); errWrite != nil {
 				err = errWrite
 			}
-			return n, addr, byte('C'), roll.Sum32(), err
+			return n, addr, byte('C'), rollsum(roll.Sum64()), err
 		}
 		return
 	}
 
 	// Roll until boundary or EOF
-	for roll.Sum32()&chunkMask != chunkMask && n < maxChunkSize {
+	for rollsum(roll.Sum64())&chunkMask != chunkMask && n < maxChunkSize {
 		b, err = stream.ReadByte()
 		if err != nil {
 			break
@@ -176,7 +178,7 @@ func (o *Opi) Chunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte,
 	if addr, errWrite = o.Serialize(c); errWrite != nil {
 		err = errWrite
 	}
-	return uint64(n), addr, byte('C'), roll.Sum32(), err
+	return uint64(n), addr, byte('C'), rollsum(roll.Sum64()), err
 }
 
 func (o *Opi) Snapshot(path string) (addr []byte, filetype byte, err error) {

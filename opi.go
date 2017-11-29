@@ -11,8 +11,8 @@ import (
 	"os"
 	"time"
 
+	"code.cloudfoundry.org/bytefmt"
 	"github.com/chmduquesne/rollinghash/buzhash64"
-	"github.com/cloudfoundry/bytefmt"
 )
 
 const (
@@ -29,6 +29,13 @@ const (
 )
 
 type rollsum uint64
+
+type storedMetaChunk struct {
+	addr     []byte
+	sum      rollsum
+	len      uint64
+	metatype byte
+}
 
 type Opi struct {
 	Storage

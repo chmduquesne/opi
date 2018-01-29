@@ -13,6 +13,7 @@ import (
 
 	"code.cloudfoundry.org/bytefmt"
 	"github.com/chmduquesne/rollinghash/buzhash64"
+	"github.com/philhofer/fwd"
 )
 
 const (
@@ -103,7 +104,7 @@ func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
 			err = errClose
 		}
 	}()
-	stream := bufio.NewReaderSize(f, 8192)
+	stream := fwd.NewReader(f)
 	t := time.Now()
 	n, addr, filetype, _, err := o.SliceUntil(stream, topMask)
 	d := time.Since(t)
@@ -114,7 +115,7 @@ func (o *Opi) Slice(path string) (addr []byte, filetype byte, err error) {
 	return addr, filetype, err
 }
 
-func (o *Opi) SliceUntil(stream *bufio.Reader, mask rollsum) (n uint64, addr []byte, metatype byte, r rollsum, err error) {
+func (o *Opi) SliceUntil(stream *fwd.Reader, mask rollsum) (n uint64, addr []byte, metatype byte, r rollsum, err error) {
 	var errWrite error
 	if mask > chunkMask {
 		s := NewSuperChunk()
@@ -140,7 +141,7 @@ func (o *Opi) SliceUntil(stream *bufio.Reader, mask rollsum) (n uint64, addr []b
 	return
 }
 
-func (o *Opi) Chunk(stream *bufio.Reader) (n uint64, addr []byte, metatype byte, r rollsum, err error) {
+func (o *Opi) Chunk(stream *fwd.Reader) (n uint64, addr []byte, metatype byte, r rollsum, err error) {
 	var errWrite error
 
 	data := make([]byte, 0, maxChunkSize)
